@@ -1,3 +1,39 @@
+---
+marp: true
+theme: default
+header: "計画行政学会 GIS 分科会 Webプログラミングセミナー"
+footer: "2025/10/25"
+
+paginate: true
+
+style: |
+    section.title {
+        justify-content: center;
+        text-align: left;
+    }
+    .round-icon {
+      position: absolute;
+      top: 50px;
+      right: 50px;
+      width: 400px;
+      height: 400px;
+      border-radius: 20%;
+      object-fit: cover;
+      z-index: 10;
+    }
+    .tiny-text {
+    font-size: 0.6em;  /* 通常の60%サイズ */
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+      image-rendering: -webkit-optimize-contrast;
+    }
+
+
+---
+
+
 # アジェンダ
 
 
