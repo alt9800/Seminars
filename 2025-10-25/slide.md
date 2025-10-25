@@ -486,6 +486,21 @@ p {
 ---
 
 
+
+
+
+# Markdownのすすめ
+
+別添資料をご覧ください。
+https://alt9800.github.io/Slide-test/2022-12-01-md-handson/
+
+研究室単位での浸透に関して青山学院大学の古橋先生のゼミが参考になるかも。
+https://github.com/furuhashilab
+
+
+---
+
+
 ボタンを押したら何かが起こる、計算する、データを保存する...
 **Webページを動かす**のがJavaScriptの役割！
 
@@ -596,12 +611,205 @@ fetch('https://api.example.com/data')
 ---
 
 
+# 地図ライブラリ入門
 
-# Markdownのすすめ
+Leaflet / MapLibre / Deck.gl
 
-別添資料をご覧ください。
-https://alt9800.github.io/Slide-test/2022-12-01-md-handson/
+---
 
-研究室単位での浸透に関して青山学院大学の古橋先生のゼミが参考になるかも。
-https://github.com/furuhashilab
+## 今日学ぶ3つのライブラリ
+
+**Leaflet**
+軽量でシンプル、最も人気
+
+**MapLibre**
+高機能、ベクトルタイル対応
+
+**Deck.gl**
+大量データの可視化に強い
+
+---
+
+# Leaflet
+
+---
+
+## Leafletとは
+
+最も人気のある地図ライブラリ
+
+特徴：
+- 軽量（39KB）
+- シンプルで学びやすい
+- プラグインが豊富
+- モバイル対応
+
+使用例：GitHub、Pinterest、Flickr
+
+---
+
+## Leaflet 基本の書き方
+```html
+
+
+
+
+
+
+  const map = L.map('map').setView([35.6812, 139.7671], 13);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+```
+
+---
+
+## Leafletでできること
+
+- マーカー表示
+- ポップアップ
+- ポリゴン描画
+- GeoJSON読み込み
+- イベント処理
+
+シンプルな地図アプリに最適
+
+---
+
+# MapLibre
+
+---
+
+## MapLibreとは
+
+Mapbox GL JSのオープンソース版
+
+特徴：
+- ベクトルタイル対応
+- 3D表示可能
+- カスタムスタイル
+- 高速レンダリング
+
+使用例：位置情報サービス、ダッシュボード
+
+---
+
+## MapLibre 基本の書き方
+```html
+
+
+
+
+
+
+  const map = new maplibregl.Map({
+    container: 'map',
+    style: 'https://demotiles.maplibre.org/style.json',
+    center: [139.7671, 35.6812],
+    zoom: 13
+  });
+
+```
+
+---
+
+## MapLibreでできること
+
+- ベクトルタイル表示
+- 3D建物表示
+- カスタム地図デザイン
+- 地図の回転・傾き
+- アニメーション
+
+デザインにこだわる地図に最適
+
+---
+
+# Deck.gl
+
+---
+
+## Deck.glとは
+
+大量データ可視化に特化したライブラリ
+
+特徴：
+- WebGL活用で高速
+- 数百万点のデータも表示可能
+- 多彩なレイヤー
+- 3D表現
+
+開発元：Uber
+
+---
+
+## Deck.gl 基本の書き方
+```html
+
+
+
+
+
+  new deck.DeckGL({
+    container: 'map',
+    initialViewState: {
+      longitude: 139.7671,
+      latitude: 35.6812,
+      zoom: 13
+    },
+    controller: true,
+    layers: []
+  });
+
+```
+
+---
+
+## Deck.glでできること
+
+- ヒートマップ
+- 3Dヘキサゴン
+- 軌跡アニメーション
+- 大量ポイント表示
+- データビジュアライゼーション
+
+ビッグデータの可視化に最適
+
+---
+
+## 3つのライブラリ比較
+
+| | Leaflet | MapLibre | Deck.gl |
+|---|---------|----------|---------|
+| 難易度 | 易しい | 中程度 | やや難 |
+| 用途 | 一般的な地図 | デザイン重視 | データ可視化 |
+| サイズ | 軽量 | 中程度 | 重い |
+| 3D | × | ○ | ◎ |
+
+---
+
+## まとめ
+
+**まず試すなら**
+Leaflet
+
+**デザインにこだわるなら**
+MapLibre
+
+**大量データを扱うなら**
+Deck.gl
+
+すべてオープンソース、無料で使える
+
+
+
+---
+
+
+# おすすめサイト
+
+kepler.gl
+https://kepler.gl/
+
+Dekart - SQL to Map Instantly - Visualize BigQuery, Snowflake & Wherobots Data.
+https://dekart.xyz/
 
