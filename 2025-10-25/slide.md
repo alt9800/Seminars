@@ -85,7 +85,35 @@ Bitbucket や Giteeなどの商用代替もある。
 
 # どこでコードを書くか
 
-エディタ色々 (VSCode)
+## 1. Web上のエディター
+
+インストール不要、すぐに試せる
+
+- **CodePen** - codepen.io
+- **JSFiddle** - jsfiddle.net
+- **Wandbox** - wandbox.org
+- **CodeSandbox** - codesandbox.io
+
+メリット：
+- すぐに始められる
+- 結果がリアルタイムで見える
+- 共有が簡単
+
+---
+
+## 2. テキストエディタ
+
+自分のPCで開発する
+
+シンプル：
+- メモ帳（Windows）
+- テキストエディット（Mac）
+
+高機能：
+- **Visual Studio Code** - 最人気
+- Sublime Text
+- Atom
+
 
 
 ---
