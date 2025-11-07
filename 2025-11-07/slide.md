@@ -848,17 +848,23 @@ DEMデータや気象データにはCCライセンスで提供されているも
 ---
 
 
-類似サービス
+### 類似サービス
 
 
+## Tellus 
+
+日本発の衛星データプラットフォーム
+ブラウザ上でデータ検索・解析が可能で
+Jupyter Notebookベースのエディターを持っています。
+QGISからの読み込み用のAPIも提供されています。
+だいち2号(ALOS-2) SAR画像やSentinel-1/2など
+
+##  NASA Worldvie(NASA AppEEARS)
 
 
-VEGA
-
-Tellus
-
-EQ
-
+## VEGA
+Google Earth Engine Python APIを利用してデータを取得しやすくしているサービス (By RESTEC)
+https://rs-training.jp/square/vega/
 
 ---
 
@@ -874,6 +880,17 @@ https://x.com/emmyeil/status/1986632418682667373
 もっと3Dで見てみたい！！
 
 3D TilesやRGB Terrainのような形式にしてみよう！
+
+
+---
+
+
+## 人工衛星のデータを使ったチャレンジもおすすめ！！
+
+https://solafune.com/ja
+
+https://www.spaceappschallenge.org
+
 
 
 ---
