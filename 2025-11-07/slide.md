@@ -852,6 +852,7 @@ DEMデータや気象データにはCCライセンスで提供されているも
 
 
 ## Tellus 
+https://www.tellusxdp.com/
 
 日本発の衛星データプラットフォーム
 ブラウザ上でデータ検索・解析が可能で
@@ -861,6 +862,10 @@ QGISからの読み込み用のAPIも提供されています。
 
 ##  NASA Worldvie(NASA AppEEARS)
 
+https://worldview.earthdata.nasa.gov
+インタラクティブな地図ビューアで、24時間以内のデータの閲覧などもできます。
+
+---
 
 ## VEGA
 Google Earth Engine Python APIを利用してデータを取得しやすくしているサービス (By RESTEC)
@@ -875,11 +880,9 @@ https://x.com/emmyeil/status/1986632418682667373
 
 ---
 
+## Try もっと3Dで見てみたい！！
 
-
-もっと3Dで見てみたい！！
-
-3D TilesやRGB Terrainのような形式にしてみよう！
+地形データなどを3D TilesやRGB Terrainのような形式にしてみよう！
 
 
 ---
