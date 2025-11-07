@@ -51,48 +51,61 @@ style: |
 LiDARや機械学習による測量支援 / 屋内の地図化ツール/
 点字ブロック Lineデータ作成 /Web における3D
 # お仕事
-https://ikominaprj.xsrv.jp/AR/
-# 趣味
-https://simplespeedtest-amaranth.web.app
-https://alt9800.github.io/visualization/prefecture-viewer/
+鳥居などの3Dアーカイブ / WebGISのコンサルティング / 水理 (野外IoT)
 # 登壇
 iOSDC2024 : https://fortee.jp/iosdc-japan-2024/proposal/afbcd097-0da9-4073-8f48-528f007e28b7
 # 最近つくってるもの
 https://solemate-3xn.pages.dev
+https://simplespeedtest-amaranth.web.app
 ```
 
-(ここもあとで編集するか)
+---
+
+
+##  知って欲しいこと : 
+# 3D地形データがどのように作られているか、それをどのように活用するか
+
+
+(ツールの「使い方」の話に終始してしまう部分があるのでご了承ください 🙇‍♂️)
 
 ---
 
 
-知って欲しいこと : 3D地形データがどのように作られているか
+## リモートセンシングとは？
 
+> 人工衛星や航空機などから地球の表面（Earth's surface）付近を観測する技術を指すことが多い
 
-(ツールの「使い方」の話に終始してしまいますが)
+[Wikipedia : リモートセンシング](https://ja.wikipedia.org/wiki/%E3%83%AA%E3%83%A2%E3%83%BC%E3%83%88%E3%82%BB%E3%83%B3%E3%82%B7%E3%83%B3%E3%82%B0)
+
+---
+
+## Google Earth Engineとは？
+
+大規模地理空間分析プラットフォームです。
+近年ではGoogle Cloud に組み込まれ、これにより課金情報やWebAPIやコンピューティングリソースが管理されています。
+
+衛星画像を中心に多くのデータがコレクションされており、適宜しぼりこんで呼び出すことができます。
+
+Google Earthは閲覧用のプラットフォームだったことと比較すると、GEEは計算のためのツールと言えるでしょう。
 
 ---
 
 
-リモートセンシングとは？
+## Google Earth Engine(GEE)でできること
+
+ブラウザ上のコードエディタを使うと、Javascriptを用いて簡易に既存データセットを呼び出すことができます。(様々組み込み関数が用意されています。)
+
+また、近年では同様にGoogleの管理している [Google Colaboratory](https://colab.research.google.com/?hl=ja)からPythonを使ってAPI経由でリソースを取得する機会も増えてきました。
 
 
 
 ---
 
-Google Earth Engineとは？
+## Google Earth Engineを使うと何が嬉しいか。
 
+従来、人工衛星のデータはとても容量が大きく、手元のコンピュータ(ローカル)に膨大な容量も必要で、かつマシンスペックも強くなければいけませんでした。
 
----
-
-Google Earthとの関連
-
-
----
-
-
-GEEでできること
-
+しかし、Google (Cloud)が得意とするコンピューティングリソース管理により、範囲ごとに計算を切り出して並列に演算したり、広い範囲で多くの計算が必要でも、手持ちのPCの負荷を小さく解析ができるようになりました。
 
 ---
 
@@ -134,6 +147,7 @@ https://developers.google.com/earth-engine/datasets?hl=ja
 
 ---
 
+## 地形データ(解析済みセット)
 
 
 |データ名|解像度|解析手法|提供元|
@@ -172,11 +186,6 @@ https://himawari8.nict.go.jp/
 
 ---
 
-衛星の種類
-
-
----
-
 航空写真測量とどう違うのさ
 
 
@@ -199,11 +208,12 @@ https://earthengine.google.com
 ---
 
 
-まずはログイン
+## まずはログインからやってみましょう！
 
 
 ---
-
+Google Earth Engineのページにアクセスして、
+https://earthengine.google.com
 ![alt](./Assets/image1.png)
 
 
@@ -215,7 +225,8 @@ https://earthengine.google.com
 
 ---
 
-
+まずはリソースの構成を行っておくと良いです。(後述)
+(Google Cloudの利用だと他のサービスでも必ず行います。)
 ![alt](./Assets/image3.png)
 
 
@@ -311,8 +322,6 @@ var b=2
 var c=a+b
 print(c)
 ```
-
----
 
 <!--GEEの中でGeminiにトラブルシューティングさせてほしい-->
 
@@ -776,7 +785,31 @@ Map.addLayer(ee.Image().paint(area, 1, 2),
 ---
 
 
-Google Earth Engineで扱う画像のライセンス
+### Google Earth Engineで扱う画像のライセンスについて
+
+以下のデータはパブリックドメインとして提供されているようです。
+- Landsat: NASAは米国連邦機関のため著作権なし、自由に利用可能
+- MODIS: 同様にNASAデータ
+- Sentinel: ESAのオープンデータポリシー、商用利用含めて自由
+
+DEMデータや気象データにはCCライセンスで提供されているものが多くあります。
+
+(これらのデータの提供先となるプラットフォームはGoogle Earth Engineだけではなかったりする)
+
+データセットカタログの`Terms of Use`セクションを確認すると各データセットについて詳しく書いてあります。
+
+---
+
+
+作成したデータについては研究や教育目的での利用が許可されています。
+
+背景地図にGoogle Mapsが含まれる場合も別途地図の著作権について留意する必要があります。
+
+```
+© 2025 Google
+データ出典: Copernicus DEM (ESA)
+```
+のような書き方をすると良いです。
 
 
 
@@ -811,3 +844,6 @@ https://x.com/emmyeil/status/1986632418682667373
 
 
 ---
+
+今月は可視化強化月間なのでXやInstagramで探してみましょう！
+https://30daymapchallenge.com
