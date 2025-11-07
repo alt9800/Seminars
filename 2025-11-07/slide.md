@@ -666,7 +666,110 @@ https://maps.app.goo.gl/d7GQ2M7PbVZfSPnR9
 https://www.openstreetmap.org/#map=17/37.401226/137.242917
 
 ---
+Sentinel-1 SAR画像の比較
 
+使用データ:
+- 地震前: 2023年12月1日〜12月31日の平均
+- 地震後: 2024年1月1日〜1月31日の平均
+- センサー: Sentinel-1(VV偏波、Descending軌道)
+
+---
+
+変化量の計算と地滑り抽出
+
+計算式:
+変化量 = 地震後 - 地震前
+
+地滑り検出の条件:
+① SAR後方散乱が-2.5dB以上減少
+   → 地表面が粗くなった(土砂崩れ)
+   
+② 傾斜角が20度以上
+   → 地滑りが起きやすい急斜面
+   
+③ 標高50m以上
+   → 海域を除外
+
+
+---
+
+レイヤー構成:
+1. 変化量マップ(赤白青)
+   - 赤: SAR減少(地滑りの可能性)
+   - 青: SAR増加
+   
+2. 地滑り候補地(黄色)
+   - 条件を満たした地点
+   
+3. 分析範囲(黒枠)
+   - 能登半島北部
+
+---
+
+Step1 地形データの読み込み
+
+```js
+// ----- 設定 -----
+var area = ee.Geometry.Rectangle([136.8, 37.2, 137.4, 37.6]);
+Map.centerObject(area, 10);
+
+// ----- データ取得 -----
+var sar = ee.ImageCollection('COPERNICUS/S1_GRD')
+  .filterBounds(area)
+  .filter(ee.Filter.eq('orbitProperties_pass', 'DESCENDING'))
+  .select('VV');
+
+// 地震前: 2023年12月
+var before = sar.filterDate('2023-12-01', '2024-01-01').median();
+
+// 地震後: 2024年1月
+var after = sar.filterDate('2024-01-01', '2024-01-31').median();
+
+// 地形データ
+var dem = ee.Image('USGS/SRTMGL1_003');
+var slope = ee.Terrain.slope(dem);
+
+```
+
+---
+
+Step2 変化量計算
+
+```js
+// SAR後方散乱の変化量(dB)
+var change = after.subtract(before);
+
+// 地滑り条件
+// 1. SAR後方散乱が大きく減少(-2.5dB以下)
+// 2. 急傾斜地(20度以上)
+// 3. 陸地(標高50m以上)
+var landslide = change.lt(-2.5)
+  .and(slope.gt(20))
+  .and(dem.gt(50));
+```
+
+---
+
+Step3 変化量を可視化する
+
+```js
+
+// 変化量マップ
+Map.addLayer(change.updateMask(dem.gt(0)), 
+  {min: -4, max: 4, palette: ['red', 'white', 'blue']}, 
+  '変化量(赤=減少、青=増加)');
+
+// 地滑り候補地
+Map.addLayer(landslide.selfMask(), 
+  {palette: ['yellow']}, 
+  '地滑り候補地');
+
+// 分析範囲
+Map.addLayer(ee.Image().paint(area, 1, 2), 
+  {palette: 'black'}, 
+  '分析範囲');
+
+```
 
 
 
