@@ -218,9 +218,13 @@ DSMが欲しいパターン : 建物の高さ情報をしりたい時
 
 ---
 
+リンク
 https://earthengine.google.com
 
-視覚的に見た方が理解しやすし人はYoutubeで視聴するのも面白いかも
+コードエディター
+https://code.earthengine.google.com
+
+視覚的に見た方が理解しやすい人はYoutubeで視聴するのも面白いかも
 
 ---
 
