@@ -121,7 +121,7 @@ https://developers.google.com/earth-engine/datasets?hl=ja
 
 ---
 
-衛星データの種類
+# 衛星データの種類
 
 ---
 
@@ -835,7 +835,7 @@ DEMデータや気象データにはCCライセンスで提供されているも
 
 他にどんなデータがあるか？
 
-土壌水分量データ (Soil Moisture Active Passive)
+### 土壌水分量データ (Soil Moisture Active Passive)
 ```
 観測手法 : Lバンドマイクロ波放射計
 データID : NASA_USDA/HSL/SMAP10KM_soil_moisture
@@ -844,6 +844,11 @@ DEMデータや気象データにはCCライセンスで提供されているも
 観測タイミング : 日次
 ```
 
+### NDVI（正規化植生指標) 
+植物は近赤外が強く、赤色が弱く反射されることを利用してデータを抽出する。
+
+### Night Light
+夜間の観測で、地球から確認できる光をデータ化する。
 
 ---
 
