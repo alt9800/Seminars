@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>MapLibre 基本の地図</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { width: 100%; height: 100vh; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script>
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                version: 8,
+                sources: {
+                    'gsi-std': {
+                        type: 'raster',
+                        tiles: [
+                            'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png'
+                        ],
+                        tileSize: 256,
+                        attribution: '&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'
+                    }
+                },
+                layers: [
+                    {
+                        id: 'gsi-std-layer',
+                        type: 'raster',
+                        source: 'gsi-std',
+                        minzoom: 0,
+                        maxzoom: 18
+                    }
+                ]
+            },
+            center: [139.7671, 35.6812],
+            zoom: 13
+        });
+        
+        map.addControl(new maplibregl.NavigationControl());
+        
+        map.on('load', function() {
+            const stations = [
+                { name: '東京駅', lng: 139.7671, lat: 35.6812 },
+                { name: '新宿駅', lng: 139.7006, lat: 35.6896 },
+                { name: '渋谷駅', lng: 139.7016, lat: 35.6580 },
+                { name: '品川駅', lng: 139.7387, lat: 35.6284 },
+                { name: '池袋駅', lng: 139.7109, lat: 35.7295 }
+            ];
+            
+            stations.forEach(function(station) {
+                const popup = new maplibregl.Popup({ offset: 25 })
+                    .setHTML('<b>' + station.name + '</b>');
+                
+                new maplibregl.Marker()
+                    .setLngLat([station.lng, station.lat])
+                    .setPopup(popup)
+                    .addTo(map);
+            });
+            
+            map.addSource('tokyo-circle', {
+                type: 'geojson',
+                data: {
+                    type: 'Feature',
+                    geometry: {
+                        type: 'Point',
+                        coordinates: [139.7671, 35.6812]
+                    }
+                }
+            });
+            
+            map.addLayer({
+                id: 'circle-layer',
+                type: 'circle',
+                source: 'tokyo-circle',
+                paint: {
+                    'circle-radius': {
+                        stops: [
+                            [0, 0],
+                            [20, 50000]
+                        ],
+                        base: 2
+                    },
+                    'circle-color': '#ff3333',
+                    'circle-opacity': 0.3,
+                    'circle-stroke-width': 2,
+                    'circle-stroke-color': '#ff0000'
+                }
+            });
+        });
+    </script>
+</body>
+</html>
