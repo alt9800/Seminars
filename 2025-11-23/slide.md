@@ -439,7 +439,185 @@ https://zenn.dev/asahina820/books/c29592e397a35b
 
 ---
 
+# DeckGL編
 
+---
+
+## Step 1: 基本の地図を表示
+
+```html
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Deck.gl 基本の地図</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <style>
+        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+        #map { width: 100%; height: 100vh; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <!-- Deck.gl と MapLibre GL JS -->
+    <script src="https://unpkg.com/deck.gl@9.0.0/dist.min.js"></script>
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+    
+    <script>
+        // 地図の初期化
+        const deckgl = new deck.DeckGL({
+            container: 'map',
+            initialViewState: {
+                longitude: 139.7671,
+                latitude: 35.6812,
+                zoom: 11,
+                pitch: 0,
+                bearing: 0
+            },
+            controller: true,
+            // 背景地図（MapLibre使用）
+            map: maplibregl,
+            mapStyle: {
+                version: 8,
+                sources: {
+                    'gsi-pale': {
+                        type: 'raster',
+                        tiles: ['https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png'],
+                        tileSize: 256
+                    }
+                },
+                layers: [{
+                    id: 'gsi-pale-layer',
+                    type: 'raster',
+                    source: 'gsi-pale'
+                }]
+            },
+            layers: []
+        });
+    </script>
+</body>
+</html>
+```
+
+
+---
+
+## Step 2: ポイントデータを表示
+主要駅をScatterplotLayerで表示します。
+layers: [] の部分を以下に置き換え：
+```js
+layers: [
+                new deck.ScatterplotLayer({
+                    id: 'stations',
+                    data: [
+                        { name: '東京駅', coordinates: [139.7671, 35.6812], passengers: 462000 },
+                        { name: '新宿駅', coordinates: [139.7006, 35.6896], passengers: 775000 },
+                        { name: '渋谷駅', coordinates: [139.7016, 35.6580], passengers: 379000 },
+                        { name: '品川駅', coordinates: [139.7387, 35.6284], passengers: 379000 },
+                        { name: '池袋駅', coordinates: [139.7109, 35.7295], passengers: 558000 }
+                    ],
+                    getPosition: d => d.coordinates,
+                    getRadius: d => Math.sqrt(d.passengers) * 2,
+                    getFillColor: [255, 140, 0],
+                    pickable: true,
+                    radiusMinPixels: 5,
+                    radiusMaxPixels: 50
+                })
+            ]
+```
+
+---
+
+## Step 3: ツールチップを追加
+
+ポイントにマウスを乗せると情報を表示します。
+new deck.DeckGL({ の設定に以下を追加：
+```js
+getTooltip: ({object}) => object && {
+                html: `<strong>${object.name}</strong><br/>乗降客数: ${object.passengers.toLocaleString()}人/日`,
+                style: {
+                    backgroundColor: '#333',
+                    color: '#fff',
+                    padding: '10px',
+                    borderRadius: '5px'
+                }
+            },
+```
+
+---
+
+## Step 4: ヒートマップを表示
+駅の密集度をヒートマップで可視化します。
+layers配列に追加：
+
+```js
+new deck.HeatmapLayer({
+                    id: 'heatmap',
+                    data: [
+                        { coordinates: [139.7671, 35.6812], weight: 462 },
+                        { coordinates: [139.7006, 35.6896], weight: 775 },
+                        { coordinates: [139.7016, 35.6580], weight: 379 },
+                        { coordinates: [139.7387, 35.6284], weight: 379 },
+                        { coordinates: [139.7109, 35.7295], weight: 558 },
+                        { coordinates: [139.7638, 35.6938], weight: 200 },
+                        { coordinates: [139.7452, 35.6939], weight: 180 },
+                        { coordinates: [139.6760, 35.6989], weight: 150 }
+                    ],
+                    getPosition: d => d.coordinates,
+                    getWeight: d => d.weight,
+                    radiusPixels: 60,
+                    intensity: 1,
+                    threshold: 0.05
+                }),
+```
+
+
+---
+
+## Step 5: 3D表示（ヘキサゴンレイヤー
+データを3Dのヘキサゴン（六角柱）で表示します。
+まず、視点を少し傾けます。initialViewState を変更：
+```js
+initialViewState: {
+                longitude: 139.7671,
+                latitude: 35.6812,
+                zoom: 11,
+                pitch: 45,  // 傾き
+                bearing: 0
+            },
+```
+
+---
+
+```js
+new deck.HexagonLayer({
+                    id: 'hexagon',
+                    data: [
+                        { coordinates: [139.7671, 35.6812], passengers: 462000 },
+                        { coordinates: [139.7006, 35.6896], passengers: 775000 },
+                        { coordinates: [139.7016, 35.6580], passengers: 379000 },
+                        { coordinates: [139.7387, 35.6284], passengers: 379000 },
+                        { coordinates: [139.7109, 35.7295], passengers: 558000 },
+                        { coordinates: [139.7638, 35.6938], passengers: 200000 },
+                        { coordinates: [139.7452, 35.6939], passengers: 180000 },
+                        { coordinates: [139.6760, 35.6989], passengers: 150000 }
+                    ],
+                    getPosition: d => d.coordinates,
+                    getElevationWeight: d => d.passengers,
+                    elevationScale: 0.01,
+                    radius: 500,
+                    coverage: 0.8,
+                    extruded: true,
+                    pickable: true
+                }),
+```
+
+
+---
 
 次回予告
 
