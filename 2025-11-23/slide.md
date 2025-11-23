@@ -447,60 +447,151 @@ https://zenn.dev/asahina820/books/c29592e397a35b
 
 ```html
 
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="ja">
 <head>
-    <meta charset="utf-8">
-    <title>Deck.gl 基本の地図</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
-    <style>
-        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
-        #map { width: 100%; height: 100vh; }
-    </style>
+  <meta charset="utf-8" />
+  <title>deck.gl + GSI タイル背景サンプル</title>
+  <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <style>
+    html, body, #map {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+  </style>
+
+  <!-- CSS for maplibre-gl (必要に応じてバージョンを合わせる) -->
+  <link href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css" rel="stylesheet" />
 </head>
 <body>
-    <div id="map"></div>
-    
-    <!-- Deck.gl と MapLibre GL JS -->
-    <script src="https://unpkg.com/deck.gl@9.0.0/dist.min.js"></script>
-    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-    <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
-    
-    <script>
-        // 地図の初期化
-        const deckgl = new deck.DeckGL({
-            container: 'map',
-            initialViewState: {
-                longitude: 139.7671,
-                latitude: 35.6812,
-                zoom: 11,
-                pitch: 0,
-                bearing: 0
-            },
-            controller: true,
-            // 背景地図（MapLibre使用）
-            map: maplibregl,
-            mapStyle: {
-                version: 8,
-                sources: {
-                    'gsi-pale': {
-                        type: 'raster',
-                        tiles: ['https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png'],
-                        tileSize: 256
-                    }
-                },
-                layers: [{
-                    id: 'gsi-pale-layer',
-                    type: 'raster',
-                    source: 'gsi-pale'
-                }]
-            },
-            layers: []
+  <div id="map"></div>
+
+  <!-- ライブラリ読み込み（バージョンは適宜更新） -->
+  <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
+  <script src="https://unpkg.com/deck.gl@8.10.21/dist.min.js"></script>
+
+  <script>
+    // Map container
+    const map = new maplibregl.Map({
+      container: 'map',
+      style: {
+        version: 8,
+        sources: {},
+        layers: []
+      },
+      center: [139.767125, 35.681236], // 東京駅（経度, 緯度）
+      zoom: 12
+    });
+
+    // GSI（地理院地図）のタイルURL（例：ベース地図（標準地図））
+    // タイル仕様: https://maps.gsi.go.jp/development/ichiran.html
+    // ここでは例として標準地図のタイル URL テンプレートを使用
+    const gsiTileUrl = 'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png';
+
+    map.on('load', () => {
+      // GSI を raster タイルソースとして追加
+      map.addSource('gsi-base', {
+        type: 'raster',
+        tiles: [gsiTileUrl],
+        tileSize: 256,
+        attribution: '国土地理院'
+      });
+
+      // 背景レイヤ（タイル）を追加（最背面に表示）
+      map.addLayer({
+        id: 'gsi-base-layer',
+        type: 'raster',
+        source: 'gsi-base',
+        paint: {}
+      }, /* beforeId */ undefined);
+
+      // deck.gl の描画用 Canvas を map に重ねる
+      // deck.gl は MapboxStyle 連携ではなく、maplibre の map 容器上に overlay する方法を取る
+      const deckCanvas = document.createElement('canvas');
+      deckCanvas.id = 'deck-canvas';
+      deckCanvas.style.position = 'absolute';
+      deckCanvas.style.top = 0;
+      deckCanvas.style.left = 0;
+      deckCanvas.style.pointerEvents = 'none'; // 地図操作を妨げない
+      map.getContainer().appendChild(deckCanvas);
+
+      // Canvas を map に合わせてリサイズするヘルパー
+      function resizeCanvas() {
+        const rect = map.getContainer().getBoundingClientRect();
+        deckCanvas.width = rect.width;
+        deckCanvas.height = rect.height;
+        deckCanvas.style.width = rect.width + 'px';
+        deckCanvas.style.height = rect.height + 'px';
+      }
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+
+      // deck.gl のインスタンスを作成（MapView を使わない単純な例）
+      const deckgl = new deck.DeckGL({
+        canvas: deckCanvas,
+        width: '100%',
+        height: '100%',
+        initialViewState: {
+          longitude: 139.767125,
+          latitude: 35.681236,
+          zoom: 12,
+          pitch: 0,
+          bearing: 0
+        },
+        controller: false, // maplibre 側で操作するため無効化
+        layers: [
+          // 例: シンプルなScatterplotLayer
+          new deck.ScatterplotLayer({
+            id: 'scatter',
+            data: [
+              { position: [139.767125, 35.681236], size: 100, color: [255, 0, 0] }, // 東京駅
+              { position: [139.774, 35.6895], size: 80, color: [0, 128, 255] } // 例
+            ],
+            getPosition: d => d.position,
+            getRadius: d => d.size,
+            getFillColor: d => d.color,
+            radiusUnits: 'pixels'
+          })
+        ]
+      });
+
+      // maplibre の表示変化に合わせて deck.gl を更新
+      function syncDeckWithMap() {
+        const center = map.getCenter();
+        const zoom = map.getZoom();
+        const bearing = map.getBearing();
+        const pitch = map.getPitch();
+
+        deckgl.setProps({
+          viewState: {
+            longitude: center.lng,
+            latitude: center.lat,
+            zoom: zoom - 1, // deck.gl と maplibre のズーム基準差がある場合調整（必要に応じて）
+            bearing: -bearing, // 座標系差があれば調整（通常はゼロでOK）
+            pitch: pitch
+          }
         });
-    </script>
+      }
+
+      // 初回同期
+      syncDeckWithMap();
+
+      // map の移動時に同期
+      map.on('move', () => {
+        resizeCanvas();
+        syncDeckWithMap();
+      });
+
+      // map のズーム中（スムーズな同期が必要なら追加）
+      map.on('zoom', syncDeckWithMap);
+      map.on('rotate', syncDeckWithMap);
+      map.on('pitch', syncDeckWithMap);
+    });
+  </script>
 </body>
 </html>
+
 ```
 
 
@@ -510,7 +601,7 @@ https://zenn.dev/asahina820/books/c29592e397a35b
 主要駅をScatterplotLayerで表示します。
 layers: [] の部分を以下に置き換え：
 ```js
-layers: [
+              layers: [
                 new deck.ScatterplotLayer({
                     id: 'stations',
                     data: [
@@ -537,7 +628,7 @@ layers: [
 ポイントにマウスを乗せると情報を表示します。
 new deck.DeckGL({ の設定に以下を追加：
 ```js
-getTooltip: ({object}) => object && {
+              getTooltip: ({object}) => object && {
                 html: `<strong>${object.name}</strong><br/>乗降客数: ${object.passengers.toLocaleString()}人/日`,
                 style: {
                     backgroundColor: '#333',
@@ -555,7 +646,7 @@ getTooltip: ({object}) => object && {
 layers配列に追加：
 
 ```js
-new deck.HeatmapLayer({
+                new deck.HeatmapLayer({
                     id: 'heatmap',
                     data: [
                         { coordinates: [139.7671, 35.6812], weight: 462 },
@@ -582,7 +673,7 @@ new deck.HeatmapLayer({
 データを3Dのヘキサゴン（六角柱）で表示します。
 まず、視点を少し傾けます。initialViewState を変更：
 ```js
-initialViewState: {
+            initialViewState: {
                 longitude: 139.7671,
                 latitude: 35.6812,
                 zoom: 11,
@@ -594,7 +685,7 @@ initialViewState: {
 ---
 
 ```js
-new deck.HexagonLayer({
+                  new deck.HexagonLayer({
                     id: 'hexagon',
                     data: [
                         { coordinates: [139.7671, 35.6812], passengers: 462000 },
