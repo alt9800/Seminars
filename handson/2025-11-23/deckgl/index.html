@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Deck.gl 可視化</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+        #map { width: 100%; height: 100vh; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <script src="https://unpkg.com/deck.gl@9.0.0/dist.min.js"></script>
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+    
+    <script>
+        const deckgl = new deck.DeckGL({
+            container: 'map',
+            initialViewState: {
+                longitude: 139.7671,
+                latitude: 35.6812,
+                zoom: 11,
+                pitch: 45,
+                bearing: 0
+            },
+            controller: true,
+            map: maplibregl,
+            mapStyle: {
+                version: 8,
+                sources: {
+                    'gsi-pale': {
+                        type: 'raster',
+                        tiles: ['https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png'],
+                        tileSize: 256
+                    }
+                },
+                layers: [{
+                    id: 'gsi-pale-layer',
+                    type: 'raster',
+                    source: 'gsi-pale'
+                }]
+            },
+            getTooltip: ({object}) => object && {
+                html: `<strong>${object.name}</strong><br/>乗降客数: ${object.passengers.toLocaleString()}人/日`,
+                style: {
+                    backgroundColor: '#333',
+                    color: '#fff',
+                    padding: '10px',
+                    borderRadius: '5px'
+                }
+            },
+            layers: [
+                new deck.HeatmapLayer({
+                    id: 'heatmap',
+                    data: [
+                        { coordinates: [139.7671, 35.6812], weight: 462 },
+                        { coordinates: [139.7006, 35.6896], weight: 775 },
+                        { coordinates: [139.7016, 35.6580], weight: 379 },
+                        { coordinates: [139.7387, 35.6284], weight: 379 },
+                        { coordinates: [139.7109, 35.7295], weight: 558 },
+                        { coordinates: [139.7638, 35.6938], weight: 200 },
+                        { coordinates: [139.7452, 35.6939], weight: 180 },
+                        { coordinates: [139.6760, 35.6989], weight: 150 }
+                    ],
+                    getPosition: d => d.coordinates,
+                    getWeight: d => d.weight,
+                    radiusPixels: 60,
+                    intensity: 1,
+                    threshold: 0.05
+                }),
+                new deck.HexagonLayer({
+                    id: 'hexagon',
+                    data: [
+                        { coordinates: [139.7671, 35.6812], passengers: 462000 },
+                        { coordinates: [139.7006, 35.6896], passengers: 775000 },
+                        { coordinates: [139.7016, 35.6580], passengers: 379000 },
+                        { coordinates: [139.7387, 35.6284], passengers: 379000 },
+                        { coordinates: [139.7109, 35.7295], passengers: 558000 },
+                        { coordinates: [139.7638, 35.6938], passengers: 200000 },
+                        { coordinates: [139.7452, 35.6939], passengers: 180000 },
+                        { coordinates: [139.6760, 35.6989], passengers: 150000 }
+                    ],
+                    getPosition: d => d.coordinates,
+                    getElevationWeight: d => d.passengers,
+                    elevationScale: 0.01,
+                    radius: 500,
+                    coverage: 0.8,
+                    extruded: true,
+                    pickable: true
+                }),
+                new deck.ScatterplotLayer({
+                    id: 'stations',
+                    data: [
+                        { name: '東京駅', coordinates: [139.7671, 35.6812], passengers: 462000 },
+                        { name: '新宿駅', coordinates: [139.7006, 35.6896], passengers: 775000 },
+                        { name: '渋谷駅', coordinates: [139.7016, 35.6580], passengers: 379000 },
+                        { name: '品川駅', coordinates: [139.7387, 35.6284], passengers: 379000 },
+                        { name: '池袋駅', coordinates: [139.7109, 35.7295], passengers: 558000 }
+                    ],
+                    getPosition: d => d.coordinates,
+                    getRadius: d => Math.sqrt(d.passengers) * 2,
+                    getFillColor: [255, 140, 0],
+                    pickable: true,
+                    radiusMinPixels: 5,
+                    radiusMaxPixels: 50
+                })
+            ]
+        });
+    </script>
+</body>
+</html>
