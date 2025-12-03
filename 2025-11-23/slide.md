@@ -322,7 +322,7 @@ https://wiki.openstreetmap.org/wiki/Japan/OSMFJ_Tileserver
 https://tile.openstreetmap.jp/styles/osm-bright-ja/style.json
 
 様々な背景レイヤを切り替える例は
-maplibreSwitchの項目を参照してください。
+(ext01)maplibreSwitchの項目を参照してください。
 
 
 ---
@@ -528,6 +528,11 @@ maplibreSwitchの項目を参照してください。
 
 ---
 
+ここまでのコードをmaplibre-compにまとめてあります。
+確認してみましょう。
+
+---
+
 ### 💡オープンデータ色々
 https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2024.html
 
@@ -549,7 +554,7 @@ const shelters = 'https://nlftp.mlit.go.jp/ksj/gml/data/P20/P20-12/P20-12_13_GML
 ---
 
 ##  データ読み込みの例
-maplbreLine の項目を参照
+(ext02)maplbreLine の項目を参照
 ```
 <!DOCTYPE html>
 <html>
@@ -615,6 +620,18 @@ maplbreLine の項目を参照
 
 
 ---
+
+## さらにおまけ
+
+ext03 : ヒートマップ機能
+
+ext04 : クラスター機能
+
+を示しています。
+
+
+---
+
 
 
 
