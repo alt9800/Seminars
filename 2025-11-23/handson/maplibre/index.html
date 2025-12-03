@@ -19,10 +19,10 @@
             style: {
                 version: 8,
                 sources: {
-                    'gsi-std': {
+                    'gsi-pale': {
                         type: 'raster',
                         tiles: [
-                            'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png'
+                            'https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png'
                         ],
                         tileSize: 256,
                         attribution: '&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'
@@ -30,21 +30,24 @@
                 },
                 layers: [
                     {
-                        id: 'gsi-std-layer',
+                        id: 'gsi-pale-layer',
                         type: 'raster',
-                        source: 'gsi-std',
+                        source: 'gsi-pale',
                         minzoom: 0,
                         maxzoom: 18
                     }
                 ]
             },
             center: [139.7671, 35.6812],
-            zoom: 13
+            zoom: 14,
+            pitch: 60,
+            bearing: 0
         });
         
         map.addControl(new maplibregl.NavigationControl());
         
         map.on('load', function() {
+            // Step 3: 主要駅データ
             const stations = [
                 { name: '東京駅', lng: 139.7671, lat: 35.6812 },
                 { name: '新宿駅', lng: 139.7006, lat: 35.6896 },
@@ -53,6 +56,7 @@
                 { name: '池袋駅', lng: 139.7109, lat: 35.7295 }
             ];
             
+            // 各駅にマーカーを配置
             stations.forEach(function(station) {
                 const popup = new maplibregl.Popup({ offset: 25 })
                     .setHTML('<b>' + station.name + '</b>');
@@ -63,33 +67,138 @@
                     .addTo(map);
             });
             
+            // Step 4: 円を描く
+            // 円のポイントを生成する関数
+            function createCircle(center, radiusInKm, points = 64) {
+                const coords = {
+                    latitude: center[1],
+                    longitude: center[0]
+                };
+                
+                const km = radiusInKm;
+                const ret = [];
+                const distanceX = km / (111.320 * Math.cos(coords.latitude * Math.PI / 180));
+                const distanceY = km / 110.574;
+                
+                for (let i = 0; i < points; i++) {
+                    const theta = (i / points) * (2 * Math.PI);
+                    const x = distanceX * Math.cos(theta);
+                    const y = distanceY * Math.sin(theta);
+                    ret.push([coords.longitude + x, coords.latitude + y]);
+                }
+                ret.push(ret[0]); // 円を閉じる
+                
+                return ret;
+            }
+            
+            // 円データソースを追加
             map.addSource('tokyo-circle', {
                 type: 'geojson',
                 data: {
                     type: 'Feature',
                     geometry: {
-                        type: 'Point',
-                        coordinates: [139.7671, 35.6812]
+                        type: 'Polygon',
+                        coordinates: [createCircle([139.7671, 35.6812], 5)]
                     }
                 }
             });
             
+            // 円の塗りつぶし
             map.addLayer({
-                id: 'circle-layer',
-                type: 'circle',
+                id: 'circle-fill',
+                type: 'fill',
                 source: 'tokyo-circle',
                 paint: {
-                    'circle-radius': {
-                        stops: [
-                            [0, 0],
-                            [20, 50000]
-                        ],
-                        base: 2
-                    },
-                    'circle-color': '#ff3333',
-                    'circle-opacity': 0.3,
-                    'circle-stroke-width': 2,
-                    'circle-stroke-color': '#ff0000'
+                    'fill-color': '#ff3333',
+                    'fill-opacity': 0.3
+                }
+            });
+            
+            // 円の枠線
+            map.addLayer({
+                id: 'circle-outline',
+                type: 'line',
+                source: 'tokyo-circle',
+                paint: {
+                    'line-color': '#ff0000',
+                    'line-width': 2
+                }
+            });
+            
+            // Step 5: 3D建物を表示
+            map.addSource('buildings', {
+                type: 'geojson',
+                data: {
+                    type: 'FeatureCollection',
+                    features: [
+                        {
+                            type: 'Feature',
+                            properties: {
+                                name: '高層ビルA',
+                                height: 150,
+                                base_height: 0
+                            },
+                            geometry: {
+                                type: 'Polygon',
+                                coordinates: [[
+                                    [139.765, 35.680],
+                                    [139.767, 35.680],
+                                    [139.767, 35.682],
+                                    [139.765, 35.682],
+                                    [139.765, 35.680]
+                                ]]
+                            }
+                        },
+                        {
+                            type: 'Feature',
+                            properties: {
+                                name: '高層ビルB',
+                                height: 200,
+                                base_height: 0
+                            },
+                            geometry: {
+                                type: 'Polygon',
+                                coordinates: [[
+                                    [139.768, 35.681],
+                                    [139.770, 35.681],
+                                    [139.770, 35.683],
+                                    [139.768, 35.683],
+                                    [139.768, 35.681]
+                                ]]
+                            }
+                        },
+                        {
+                            type: 'Feature',
+                            properties: {
+                                name: '中層ビルC',
+                                height: 80,
+                                base_height: 0
+                            },
+                            geometry: {
+                                type: 'Polygon',
+                                coordinates: [[
+                                    [139.764, 35.683],
+                                    [139.766, 35.683],
+                                    [139.766, 35.684],
+                                    [139.764, 35.684],
+                                    [139.764, 35.683]
+                                ]]
+                            }
+                        }
+                    ]
+                }
+            });
+            
+            // 3D建物レイヤーを追加
+            map.addLayer({
+                id: '3d-buildings',
+                type: 'fill-extrusion',
+                source: 'buildings',
+                paint: {
+                    'fill-extrusion-color': '#aaa',
+                    'fill-extrusion-height': ['get', 'height'],
+                    'fill-extrusion-base': ['get', 'base_height'],
+                    'fill-extrusion-opacity': 0.8
                 }
             });
         });

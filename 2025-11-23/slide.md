@@ -217,6 +217,12 @@ https://leafletjs.com/2025/05/18/leaflet-2.0.0-alpha.html
 
 ---
 
+細かいお話だと、Python(JupyterNotebookやColaboratory含む)から`foloum`や`leafmap(ipyLeaflet)`を利用して地図レイヤーを読み込む際には、
+ブラウザを介してLeafletを使ってデータの可視化を行なっています。
+
+
+---
+
 # MapLibre編
 
 ---
@@ -224,6 +230,7 @@ https://leafletjs.com/2025/05/18/leaflet-2.0.0-alpha.html
 ## Step 1: 基本の地図を表示
 handson/maplibre/index.html を作成し、以下をコピペ：
 
+MapLibreではデフォルトでベクター形式の背景地図が用意されています。(Demo Tiles)
 
 
 ```html
@@ -303,6 +310,23 @@ const map = new maplibregl.Map({
 
 ---
 
+### 💡ポイント
+
+MapLibreの最大の強みは、ベクター形式でタイルを読み込める点です。
+ラスタータイルはあらかじめpngなどで矩形(メッシュ・グリッド)に分けた領域を生成しておく一方で、
+ベクタータイルはクライアントサイドで地図のスタイルをある程度制御でき便利です。
+
+■各タイルがどのように配信されているか
+https://wiki.openstreetmap.org/wiki/Japan/OSMFJ_Tileserver
+■ベクタータイルのスタイルを実際に見てみましょう
+https://tile.openstreetmap.jp/styles/osm-bright-ja/style.json
+
+様々な背景レイヤを切り替える例は
+maplibreSwitchの項目を参照してください。
+
+
+---
+
 ## Step 3: マーカーを追加
 ナビゲーションコントロールの後に追加：
 ```html
@@ -336,39 +360,71 @@ const map = new maplibregl.Map({
 ---
 
 ## Step 4: 円を描く
+バッファとしても利用できます。
 ```html
-// 円データ（GeoJSON形式）
+// 東京駅から半径5kmの円（地図上に張り付く）
+            // 円のポイントを生成する関数
+            function createCircle(center, radiusInKm, points = 64) {
+                const coords = {
+                    latitude: center[1],
+                    longitude: center[0]
+                };
+                
+                const km = radiusInKm;
+                const ret = [];
+                const distanceX = km / (111.320 * Math.cos(coords.latitude * Math.PI / 180));
+                const distanceY = km / 110.574;
+                
+                for (let i = 0; i < points; i++) {
+                    const theta = (i / points) * (2 * Math.PI);
+                    const x = distanceX * Math.cos(theta);
+                    const y = distanceY * Math.sin(theta);
+                    ret.push([coords.longitude + x, coords.latitude + y]);
+                }
+                ret.push(ret[0]); // 円を閉じる
+                
+                return ret;
+            }
+            
+            // 円データソースを追加
             map.addSource('tokyo-circle', {
                 type: 'geojson',
                 data: {
                     type: 'Feature',
                     geometry: {
-                        type: 'Point',
-                        coordinates: [139.7671, 35.6812]
+                        type: 'Polygon',
+                        coordinates: [createCircle([139.7671, 35.6812], 5)]
                     }
                 }
             });
             
             // 円のスタイルを追加
             map.addLayer({
-                id: 'circle-layer',
-                type: 'circle',
+                id: 'circle-fill',
+                type: 'fill',
                 source: 'tokyo-circle',
                 paint: {
-                    'circle-radius': {
-                        stops: [
-                            [0, 0],
-                            [20, 50000]  // ズームレベルに応じた半径
-                        ],
-                        base: 2
-                    },
-                    'circle-color': '#ff3333',
-                    'circle-opacity': 0.3,
-                    'circle-stroke-width': 2,
-                    'circle-stroke-color': '#ff0000'
+                    'fill-color': '#ff3333',
+                    'fill-opacity': 0.3
+                }
+            });
+            
+            map.addLayer({
+                id: 'circle-outline',
+                type: 'line',
+                source: 'tokyo-circle',
+                paint: {
+                    'line-color': '#ff0000',
+                    'line-width': 2
                 }
             });
 ```
+
+---
+
+ここでのヒントとして、
+データソース(多くはgeojson形式)は、htmlやjsの中に記載することもできますし、
+外部ファイルとして読み込むこともできます。
 
 
 ---
@@ -376,38 +432,103 @@ const map = new maplibregl.Map({
 ## Step 5: 3D建物を表示
 
 ```html
-// 3D建物レイヤーを追加
+// 簡易的な建物データを作成（東京駅周辺の架空のビル）
+            map.addSource('buildings', {
+                type: 'geojson',
+                data: {
+                    type: 'FeatureCollection',
+                    features: [
+                        {
+                            type: 'Feature',
+                            properties: {
+                                name: '高層ビルA',
+                                height: 150,
+                                base_height: 0
+                            },
+                            geometry: {
+                                type: 'Polygon',
+                                coordinates: [[
+                                    [139.765, 35.680],
+                                    [139.767, 35.680],
+                                    [139.767, 35.682],
+                                    [139.765, 35.682],
+                                    [139.765, 35.680]
+                                ]]
+                            }
+                        },
+                        {
+                            type: 'Feature',
+                            properties: {
+                                name: '高層ビルB',
+                                height: 200,
+                                base_height: 0
+                            },
+                            geometry: {
+                                type: 'Polygon',
+                                coordinates: [[
+                                    [139.768, 35.681],
+                                    [139.770, 35.681],
+                                    [139.770, 35.683],
+                                    [139.768, 35.683],
+                                    [139.768, 35.681]
+                                ]]
+                            }
+                        },
+                        {
+                            type: 'Feature',
+                            properties: {
+                                name: '中層ビルC',
+                                height: 80,
+                                base_height: 0
+                            },
+                            geometry: {
+                                type: 'Polygon',
+                                coordinates: [[
+                                    [139.764, 35.683],
+                                    [139.766, 35.683],
+                                    [139.766, 35.684],
+                                    [139.764, 35.684],
+                                    [139.764, 35.683]
+                                ]]
+                            }
+                        }
+                    ]
+                }
+            });
+            
+            // 3D建物レイヤーを追加
             map.addLayer({
                 id: '3d-buildings',
-                source: 'composite',
-                'source-layer': 'building',
-                filter: ['==', 'extrude', 'true'],
                 type: 'fill-extrusion',
-                minzoom: 15,
+                source: 'buildings',
                 paint: {
                     'fill-extrusion-color': '#aaa',
-                    'fill-extrusion-height': [
-                        'interpolate',
-                        ['linear'],
-                        ['zoom'],
-                        15, 0,
-                        15.05, ['get', 'height']
-                    ],
-                    'fill-extrusion-base': [
-                        'interpolate',
-                        ['linear'],
-                        ['zoom'],
-                        15, 0,
-                        15.05, ['get', 'min_height']
-                    ],
-                    'fill-extrusion-opacity': 0.6
+                    'fill-extrusion-height': ['get', 'height'],
+                    'fill-extrusion-base': ['get', 'base_height'],
+                    'fill-extrusion-opacity': 0.8
                 }
             });
 ```
 
 ---
 
-オープンデータ色々
+これは、MapLibre GL JSのコンストラクタの引数に、`pitch`と`bearing`を追加するとみやすいかも。
+```js
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                // ... 省略 ...
+            },
+            center: [139.7671, 35.6812],
+            zoom: 14,     // ズームを上げる
+            pitch: 60,    // 傾きを追加
+            bearing: 0
+        });
+```
+
+---
+
+### 💡オープンデータ色々
 https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2024.html
 
 ```
@@ -424,6 +545,74 @@ javascript// 国土数値情報の避難所データ
 const shelters = 'https://nlftp.mlit.go.jp/ksj/gml/data/P20/P20-12/P20-12_13_GML.zip';
 → ポイントマップ、ヒートマップ
 ```
+
+---
+
+##  データ読み込みの例
+maplbreLine の項目を参照
+```
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>MapLibre 路線表示</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { width: 100%; height: 100vh; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script>
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                version: 8,
+                sources: {
+                    'gsi-pale': {
+                        type: 'raster',
+                        tiles: ['https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png'],
+                        tileSize: 256
+                    }
+                },
+                layers: [{
+                    id: 'gsi-pale-layer',
+                    type: 'raster',
+                    source: 'gsi-pale'
+                }]
+            },
+            center: [139.62, 35.67],
+            zoom: 11
+        });
+        
+        map.on('load', function() {
+            fetch('../data/railway_simple.geojson')
+                .then(response => response.json())
+                .then(data => {
+                    map.addSource('railway', {
+                        type: 'geojson',
+                        data: data
+                    });
+                    
+                    map.addLayer({
+                        id: 'railway-line',
+                        type: 'line',
+                        source: 'railway',
+                        paint: {
+                            'line-color': '#FF6347',
+                            'line-width': 4
+                        }
+                    });
+                });
+        });
+    </script>
+</body>
+</html>
+```
+
 
 ---
 
@@ -444,153 +633,66 @@ https://zenn.dev/asahina820/books/c29592e397a35b
 ---
 
 ## Step 1: 基本の地図を表示
+deckglでは基本的に
 
 ```html
 
-<!doctype html>
-<html lang="ja">
+<!DOCTYPE html>
+<html>
 <head>
-  <meta charset="utf-8" />
-  <title>deck.gl + GSI タイル背景サンプル</title>
-  <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <style>
-    html, body, #map {
-      height: 100%;
-      margin: 0;
-      padding: 0;
-    }
-  </style>
-
-  <!-- CSS for maplibre-gl (必要に応じてバージョンを合わせる) -->
-  <link href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css" rel="stylesheet" />
+    <meta charset="utf-8">
+    <title>Deck.gl 基本の地図</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <style>
+        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+        #map { width: 100%; height: 100vh; position: relative; }
+    </style>
 </head>
 <body>
-  <div id="map"></div>
-
-  <!-- ライブラリ読み込み（バージョンは適宜更新） -->
-  <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
-  <script src="https://unpkg.com/deck.gl@8.10.21/dist.min.js"></script>
-
-  <script>
-    // Map container
-    const map = new maplibregl.Map({
-      container: 'map',
-      style: {
-        version: 8,
-        sources: {},
-        layers: []
-      },
-      center: [139.767125, 35.681236], // 東京駅（経度, 緯度）
-      zoom: 12
-    });
-
-    // GSI（地理院地図）のタイルURL（例：ベース地図（標準地図））
-    // タイル仕様: https://maps.gsi.go.jp/development/ichiran.html
-    // ここでは例として標準地図のタイル URL テンプレートを使用
-    const gsiTileUrl = 'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png';
-
-    map.on('load', () => {
-      // GSI を raster タイルソースとして追加
-      map.addSource('gsi-base', {
-        type: 'raster',
-        tiles: [gsiTileUrl],
-        tileSize: 256,
-        attribution: '国土地理院'
-      });
-
-      // 背景レイヤ（タイル）を追加（最背面に表示）
-      map.addLayer({
-        id: 'gsi-base-layer',
-        type: 'raster',
-        source: 'gsi-base',
-        paint: {}
-      }, /* beforeId */ undefined);
-
-      // deck.gl の描画用 Canvas を map に重ねる
-      // deck.gl は MapboxStyle 連携ではなく、maplibre の map 容器上に overlay する方法を取る
-      const deckCanvas = document.createElement('canvas');
-      deckCanvas.id = 'deck-canvas';
-      deckCanvas.style.position = 'absolute';
-      deckCanvas.style.top = 0;
-      deckCanvas.style.left = 0;
-      deckCanvas.style.pointerEvents = 'none'; // 地図操作を妨げない
-      map.getContainer().appendChild(deckCanvas);
-
-      // Canvas を map に合わせてリサイズするヘルパー
-      function resizeCanvas() {
-        const rect = map.getContainer().getBoundingClientRect();
-        deckCanvas.width = rect.width;
-        deckCanvas.height = rect.height;
-        deckCanvas.style.width = rect.width + 'px';
-        deckCanvas.style.height = rect.height + 'px';
-      }
-      resizeCanvas();
-      window.addEventListener('resize', resizeCanvas);
-
-      // deck.gl のインスタンスを作成（MapView を使わない単純な例）
-      const deckgl = new deck.DeckGL({
-        canvas: deckCanvas,
-        width: '100%',
-        height: '100%',
-        initialViewState: {
-          longitude: 139.767125,
-          latitude: 35.681236,
-          zoom: 12,
-          pitch: 0,
-          bearing: 0
-        },
-        controller: false, // maplibre 側で操作するため無効化
-        layers: [
-          // 例: シンプルなScatterplotLayer
-          new deck.ScatterplotLayer({
-            id: 'scatter',
-            data: [
-              { position: [139.767125, 35.681236], size: 100, color: [255, 0, 0] }, // 東京駅
-              { position: [139.774, 35.6895], size: 80, color: [0, 128, 255] } // 例
-            ],
-            getPosition: d => d.position,
-            getRadius: d => d.size,
-            getFillColor: d => d.color,
-            radiusUnits: 'pixels'
-          })
-        ]
-      });
-
-      // maplibre の表示変化に合わせて deck.gl を更新
-      function syncDeckWithMap() {
-        const center = map.getCenter();
-        const zoom = map.getZoom();
-        const bearing = map.getBearing();
-        const pitch = map.getPitch();
-
-        deckgl.setProps({
-          viewState: {
-            longitude: center.lng,
-            latitude: center.lat,
-            zoom: zoom - 1, // deck.gl と maplibre のズーム基準差がある場合調整（必要に応じて）
-            bearing: -bearing, // 座標系差があれば調整（通常はゼロでOK）
-            pitch: pitch
-          }
+    <div id="map"></div>
+    
+    <!-- Deck.gl -->
+    <script src="https://unpkg.com/deck.gl@9.0.0/dist.min.js"></script>
+    
+    <script>
+        // 地図の初期化
+        const deckgl = new deck.DeckGL({
+            container: 'map',
+            initialViewState: {
+                longitude: 139.7671,
+                latitude: 35.6812,
+                zoom: 11,
+                pitch: 0,
+                bearing: 0
+            },
+            controller: true,
+            layers: [
+                // 背景地図タイル（OpenStreetMap）
+                new deck.TileLayer({
+                    id: 'osm-tiles',
+                    data: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    minZoom: 0,
+                    maxZoom: 19,
+                    tileSize: 256,
+                    renderSubLayers: props => {
+                        const {
+                            bbox: {west, south, east, north}
+                        } = props.tile;
+                        
+                        return new deck.BitmapLayer(props, {
+                            data: null,
+                            image: props.data,
+                            bounds: [west, south, east, north]
+                        });
+                    }
+                })
+            ]
         });
-      }
-
-      // 初回同期
-      syncDeckWithMap();
-
-      // map の移動時に同期
-      map.on('move', () => {
-        resizeCanvas();
-        syncDeckWithMap();
-      });
-
-      // map のズーム中（スムーズな同期が必要なら追加）
-      map.on('zoom', syncDeckWithMap);
-      map.on('rotate', syncDeckWithMap);
-      map.on('pitch', syncDeckWithMap);
-    });
-  </script>
+    </script>
 </body>
 </html>
+
 
 ```
 
@@ -709,6 +811,41 @@ layers配列に追加：
 
 
 ---
+
+ここまでの知識を整理すると、
+
+可視化そのものは道具でしかなくて、その前処理としてデータをどのように整理するか、という部分で構造的なプログラミングが必要になることも多いです。
+この部分もLLMに頼ると良いと思います。
+
+
+---
+
+これらの知識を踏まえて、
+MapLibre と DeckGLを高度に統合し、大規模なデータを読み込むことをサポートした KeplerGLを利用するところから始めると良いでしょう。
+
+このシステム自体もOSSなので、ご自身の管理環境にデプロイすることもできますし、背景地図をオープンなものに
+
+
+---
+
+
+### そのほかのTips
+
+#### 白地図が欲しい
+
+ナチュラルアースのデータを加工し、Geojsonとして表示し、背景レイヤーをOFFにする
+
+あるいはSVGとして持ち、D3.jsで表示する方法もある
+
+#### 高度な3D表現
+Cesium.jsを使う方法もあります。
+
+#### ストーリーテリング
+Re:Eeathなどが便利です。
+
+
+---
+
 
 次回予告
 
