@@ -649,8 +649,8 @@ https://zenn.dev/asahina820/books/c29592e397a35b
 
 ---
 
-## Step 1: 基本の地図を表示
-deckglでは基本的に
+## Step 1: 基本の地図を表示（OSMタイル）
+
 
 ```html
 
@@ -660,7 +660,6 @@ deckglでは基本的に
     <meta charset="utf-8">
     <title>Deck.gl 基本の地図</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
     <style>
         body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
         #map { width: 100%; height: 100vh; position: relative; }
@@ -669,16 +668,15 @@ deckglでは基本的に
 <body>
     <div id="map"></div>
     
-    <!-- Deck.gl -->
     <script src="https://unpkg.com/deck.gl@9.0.0/dist.min.js"></script>
     
     <script>
-        // 地図の初期化
+        // Deck.glの初期化
         const deckgl = new deck.DeckGL({
             container: 'map',
             initialViewState: {
-                longitude: 139.7671,
-                latitude: 35.6812,
+                longitude: 139.65,
+                latitude: 35.67,
                 zoom: 11,
                 pitch: 0,
                 bearing: 0
@@ -716,20 +714,152 @@ deckglでは基本的に
 
 ---
 
-## Step 2: ポイントデータを表示
-主要駅をScatterplotLayerで表示します。
-layers: [] の部分を以下に置き換え：
+## Step 2: 背景地図切り替え機能を追加
+<div id="map"></div> の下に以下を追加：
+
+```html
+<div id="controls">
+        <strong>背景地図切り替え</strong>
+        <button onclick="changeBaseMap('osm')">OpenStreetMap</button>
+        <button onclick="changeBaseMap('gsi')">国土地理院</button>
+        <button onclick="changeBaseMap('carto')">Carto Light</button>
+    </div>
+```
+
+---
+
+`<style> `タグ内に以下を追加：
+```
+#controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            z-index: 1;
+        }
+        #controls button {
+            display: block;
+            margin: 5px 0;
+            padding: 8px 12px;
+            cursor: pointer;
+            border: none;
+            background: #007cbf;
+            color: white;
+            border-radius: 3px;
+        }
+        #controls button:hover {
+            background: #005a8c;
+        }
+```
+
+---
+
+`const deckgl = new deck.DeckGL({ `の前に以下を追加：
+
 ```js
-              layers: [
+// 背景地図のタイル設定
+        const baseMaps = {
+            osm: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            gsi: 'https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',
+            carto: 'https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'
+        };
+        
+        let deckgl;
+        
+        // タイルレイヤーを作成する関数
+        function createTileLayer(mapKey) {
+            return new deck.TileLayer({
+                id: 'tile-layer',
+                data: baseMaps[mapKey],
+                minZoom: 0,
+                maxZoom: 19,
+                tileSize: 256,
+                renderSubLayers: props => {
+                    const {
+                        bbox: {west, south, east, north}
+                    } = props.tile;
+                    
+                    return new deck.BitmapLayer(props, {
+                        data: null,
+                        image: props.data,
+                        bounds: [west, south, east, north]
+                    });
+                }
+            });
+        }
+        
+        // 背景地図を切り替える関数
+        function changeBaseMap(mapKey) {
+            deckgl.setProps({
+                layers: [createTileLayer(mapKey)]
+            });
+        }
+
+```
+
+---
+
+そして `const deckgl = new deck.DeckGL({` を以下に変更：
+
+```js
+deckgl = new deck.DeckGL({
+```
+
+
+
+---
+
+## Step 3: ScatterplotLayerで点を表示
+
+`changeBaseMap` 関数の前に以下を追加：
+
+```javascript        
+// 主要駅データ
+        const stationsData = [
+            { name: '東京駅', coordinates: [139.7671, 35.6812], passengers: 462000 },
+            { name: '新宿駅', coordinates: [139.7006, 35.6896], passengers: 775000 },
+            { name: '渋谷駅', coordinates: [139.7016, 35.6580], passengers: 379000 },
+            { name: '品川駅', coordinates: [139.7387, 35.6284], passengers: 379000 },
+            { name: '池袋駅', coordinates: [139.7109, 35.7295], passengers: 558000 }
+        ];
+```
+
+---
+
+`changeBaseMap` 関数を以下に変更：
+```javascript        
+function changeBaseMap(mapKey) {
+            deckgl.setProps({
+                layers: [
+                    createTileLayer(mapKey),
+                    // ScatterplotLayer - 駅のポイント
+                    new deck.ScatterplotLayer({
+                        id: 'stations',
+                        data: stationsData,
+                        getPosition: d => d.coordinates,
+                        getRadius: d => Math.sqrt(d.passengers) * 2,
+                        getFillColor: [255, 140, 0],
+                        pickable: true,
+                        radiusMinPixels: 5,
+                        radiusMaxPixels: 50
+                    })
+                ]
+            });
+        }
+```
+
+---
+
+そして初期表示用に `deckgl = new deck.DeckGL({` の `layers:` 部分を以下に変更：
+```javascript            
+layers: [
+                createTileLayer('osm'),
                 new deck.ScatterplotLayer({
                     id: 'stations',
-                    data: [
-                        { name: '東京駅', coordinates: [139.7671, 35.6812], passengers: 462000 },
-                        { name: '新宿駅', coordinates: [139.7006, 35.6896], passengers: 775000 },
-                        { name: '渋谷駅', coordinates: [139.7016, 35.6580], passengers: 379000 },
-                        { name: '品川駅', coordinates: [139.7387, 35.6284], passengers: 379000 },
-                        { name: '池袋駅', coordinates: [139.7109, 35.7295], passengers: 558000 }
-                    ],
+                    data: stationsData,
                     getPosition: d => d.coordinates,
                     getRadius: d => Math.sqrt(d.passengers) * 2,
                     getFillColor: [255, 140, 0],
@@ -742,12 +872,12 @@ layers: [] の部分を以下に置き換え：
 
 ---
 
-## Step 3: ツールチップを追加
+## Step 4: ツールチップを追加
 
-ポイントにマウスを乗せると情報を表示します。
-new deck.DeckGL({ の設定に以下を追加：
-```js
-              getTooltip: ({object}) => object && {
+`deckgl = new deck.DeckGL({ `の設定に以下を追加：
+
+```javascript            
+getTooltip: ({object}) => object && object.name && {
                 html: `<strong>${object.name}</strong><br/>乗降客数: ${object.passengers.toLocaleString()}人/日`,
                 style: {
                     backgroundColor: '#333',
@@ -760,74 +890,89 @@ new deck.DeckGL({ の設定に以下を追加：
 
 ---
 
-## Step 4: ヒートマップを表示
-駅の密集度をヒートマップで可視化します。
-layers配列に追加：
+## Step 5: GeoJSON形式でパスを表示
 
-```js
-                new deck.HeatmapLayer({
-                    id: 'heatmap',
-                    data: [
-                        { coordinates: [139.7671, 35.6812], weight: 462 },
-                        { coordinates: [139.7006, 35.6896], weight: 775 },
-                        { coordinates: [139.7016, 35.6580], weight: 379 },
-                        { coordinates: [139.7387, 35.6284], weight: 379 },
-                        { coordinates: [139.7109, 35.7295], weight: 558 },
-                        { coordinates: [139.7638, 35.6938], weight: 200 },
-                        { coordinates: [139.7452, 35.6939], weight: 180 },
-                        { coordinates: [139.6760, 35.6989], weight: 150 }
-                    ],
-                    getPosition: d => d.coordinates,
-                    getWeight: d => d.weight,
-                    radiusPixels: 60,
-                    intensity: 1,
-                    threshold: 0.05
-                }),
+`stationsData` の後に以下を追加：
+
+```javascript        
+// GeoJSON形式のパスデータ
+        const pathData = {
+            type: 'FeatureCollection',
+            features: [
+                {
+                    type: 'Feature',
+                    properties: { name: '中央線', color: [255, 99, 71] },
+                    geometry: {
+                        type: 'LineString',
+                        coordinates: [
+                            [139.7003573288469, 35.691239928314374],
+                            [139.7009635407017, 35.68820849667566],
+                            [139.69578888654496, 35.68369419472977],
+                            [139.6875474637206, 35.67832317143727],
+                            [139.68017274365303, 35.67583437982546],
+                            [139.6676212831522, 35.6734214567513],
+                            [139.65915365759162, 35.67072037158694],
+                            [139.6510055510484, 35.668539799401145],
+                            [139.64190275546554, 35.66589306040666],
+                            [139.6326221009918, 35.66738232477873],
+                            [139.6240861011417, 35.668152685857876],
+                            [139.61514396851464, 35.669913763965226],
+                            [139.60986015831952, 35.67079428322272],
+                            [139.601331512042, 35.66793266851582],
+                            [139.58480410266674, 35.662319842064704],
+                            [139.57538175409587, 35.65830669802037],
+                            [139.5669694195912, 35.65422992235908],
+                            [139.55914740892905, 35.65035573108334],
+                            [139.55210343625362, 35.64969588326824],
+                            [139.54438400157323, 35.65167794492214]
+                        ]
+                    }
+                }
+            ]
+        };
 ```
+
+---
+
+`changeBaseMap` 関数と初期表示の `layers` 配列に `PathLayer` を追加：
+
+```javascript                    
+// PathLayer - GeoJSON形式の路線
+                    new deck.PathLayer({
+                        id: 'path-layer',
+                        data: pathData.features,
+                        getPath: d => d.geometry.coordinates,
+                        getColor: d => d.properties.color,
+                        getWidth: 5,
+                        widthMinPixels: 2,
+                        pickable: true
+                    }),
+```
+
+---
+
+## 応用編
+
+
+グリッド押出: ext-01
+
+ヘキサゴン: ext-02
+
+アーク: ext-03
+
+ヒートマップ: ext-04
 
 
 ---
 
-## Step 5: 3D表示（ヘキサゴンレイヤー
-データを3Dのヘキサゴン（六角柱）で表示します。
-まず、視点を少し傾けます。initialViewState を変更：
-```js
-            initialViewState: {
-                longitude: 139.7671,
-                latitude: 35.6812,
-                zoom: 11,
-                pitch: 45,  // 傾き
-                bearing: 0
-            },
-```
+
+他のサンプルをぜひ確認してみて下さい。
+
+https://deck.gl/examples
 
 ---
 
-```js
-                  new deck.HexagonLayer({
-                    id: 'hexagon',
-                    data: [
-                        { coordinates: [139.7671, 35.6812], passengers: 462000 },
-                        { coordinates: [139.7006, 35.6896], passengers: 775000 },
-                        { coordinates: [139.7016, 35.6580], passengers: 379000 },
-                        { coordinates: [139.7387, 35.6284], passengers: 379000 },
-                        { coordinates: [139.7109, 35.7295], passengers: 558000 },
-                        { coordinates: [139.7638, 35.6938], passengers: 200000 },
-                        { coordinates: [139.7452, 35.6939], passengers: 180000 },
-                        { coordinates: [139.6760, 35.6989], passengers: 150000 }
-                    ],
-                    getPosition: d => d.coordinates,
-                    getElevationWeight: d => d.passengers,
-                    elevationScale: 0.01,
-                    radius: 500,
-                    coverage: 0.8,
-                    extruded: true,
-                    pickable: true
-                }),
-```
 
-
----
 
 ここまでの知識を整理すると、
 
@@ -838,9 +983,9 @@ layers配列に追加：
 ---
 
 これらの知識を踏まえて、
-MapLibre と DeckGLを高度に統合し、大規模なデータを読み込むことをサポートした KeplerGLを利用するところから始めると良いでしょう。
+MapLibre と DeckGLを高度に統合し、大規模なデータを読み込むことをサポートした [KeplerGL](https://kepler.gl)を利用するところから始めると良いでしょう。
 
-このシステム自体もOSSなので、ご自身の管理環境にデプロイすることもできますし、背景地図をオープンなものに
+このシステム自体もOSSなので、ご自身の管理環境にデプロイすることもできますし、背景地図をオープンなものに置き換えるとスクリーンショットを成果として活用しやすいと思います。
 
 
 ---
@@ -882,4 +1027,3 @@ Re:Eeathなどが便利です。
 場所 計画行政学会GIS研究会 Discord (https://discord.gg/aThG5Vge9g)
 
 
----
