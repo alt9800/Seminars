@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MapLibre 地図切り替えサンプル</title>
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: sans-serif;
+        }
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+        .map-controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            max-width: 300px;
+            z-index: 1;
+        }
+        .map-controls h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            color: #333;
+        }
+        .map-controls label {
+            display: block;
+            margin: 8px 0;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .map-controls input[type="radio"] {
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="map-controls">
+        <h3>背景地図の選択</h3>
+        <label>
+            <input type="radio" name="basemap" value="osm-bright-vector" checked>
+            Bright-JA 日本デザイン(ベクタ)
+        </label>
+        <label>
+            <input type="radio" name="basemap" value="osm-bright-raster">
+            Bright-JA 日本デザイン(ラスタ)
+        </label>
+        <label>
+            <input type="radio" name="basemap" value="osm-standard">
+            OpenStreetMap Standard
+        </label>
+        <label>
+            <input type="radio" name="basemap" value="gsi-pale">
+            地理院地図 淡色
+        </label>
+        <label>
+            <input type="radio" name="basemap" value="gsi-standard">
+            地理院地図 標準
+        </label>
+        <label>
+            <input type="radio" name="basemap" value="gsi-photo">
+            地理院地図 写真
+        </label>
+    </div>
+
+    <script>
+        // 地図スタイル定義
+        const mapStyles = {
+            'osm-bright-vector': {
+                style: 'https://tile.openstreetmap.jp/styles/osm-bright-ja/style.json'
+            },
+            'osm-bright-raster': {
+                style: {
+                    version: 8,
+                    sources: {
+                        'osm-bright-raster': {
+                            type: 'raster',
+                            tiles: ['https://tile.openstreetmap.jp/styles/osm-bright-ja/{z}/{x}/{y}.png'],
+                            tileSize: 256,
+                            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                        }
+                    },
+                    layers: [{
+                        id: 'osm-bright-raster-layer',
+                        type: 'raster',
+                        source: 'osm-bright-raster',
+                        minzoom: 0,
+                        maxzoom: 22
+                    }]
+                }
+            },
+            'osm-standard': {
+                style: {
+                    version: 8,
+                    sources: {
+                        'osm': {
+                            type: 'raster',
+                            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                            tileSize: 256,
+                            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                        }
+                    },
+                    layers: [{
+                        id: 'osm-layer',
+                        type: 'raster',
+                        source: 'osm',
+                        minzoom: 0,
+                        maxzoom: 19
+                    }]
+                }
+            },
+            'gsi-pale': {
+                style: {
+                    version: 8,
+                    sources: {
+                        'gsi-pale': {
+                            type: 'raster',
+                            tiles: ['https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png'],
+                            tileSize: 256,
+                            attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html">地理院タイル</a>'
+                        }
+                    },
+                    layers: [{
+                        id: 'gsi-pale-layer',
+                        type: 'raster',
+                        source: 'gsi-pale',
+                        minzoom: 0,
+                        maxzoom: 18
+                    }]
+                }
+            },
+            'gsi-standard': {
+                style: {
+                    version: 8,
+                    sources: {
+                        'gsi-std': {
+                            type: 'raster',
+                            tiles: ['https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png'],
+                            tileSize: 256,
+                            attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html">地理院タイル</a>'
+                        }
+                    },
+                    layers: [{
+                        id: 'gsi-std-layer',
+                        type: 'raster',
+                        source: 'gsi-std',
+                        minzoom: 0,
+                        maxzoom: 18
+                    }]
+                }
+            },
+            'gsi-photo': {
+                style: {
+                    version: 8,
+                    sources: {
+                        'gsi-photo': {
+                            type: 'raster',
+                            tiles: ['https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg'],
+                            tileSize: 256,
+                            attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html">地理院タイル</a>'
+                        }
+                    },
+                    layers: [{
+                        id: 'gsi-photo-layer',
+                        type: 'raster',
+                        source: 'gsi-photo',
+                        minzoom: 0,
+                        maxzoom: 18
+                    }]
+                }
+            }
+        };
+
+        // 地図の初期化
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: mapStyles['osm-bright-vector'].style,
+            center: [139.7670, 35.6812], // 東京
+            zoom: 12
+        });
+
+        // ナビゲーションコントロールの追加
+        map.addControl(new maplibregl.NavigationControl());
+
+        // ラジオボタンの変更イベント
+        document.querySelectorAll('input[name="basemap"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                const selectedStyle = e.target.value;
+                const currentCenter = map.getCenter();
+                const currentZoom = map.getZoom();
+                const currentBearing = map.getBearing();
+                const currentPitch = map.getPitch();
+
+                // スタイルを変更
+                map.setStyle(mapStyles[selectedStyle].style);
+
+                // スタイル変更後にビューを復元
+                map.once('styledata', () => {
+                    map.jumpTo({
+                        center: currentCenter,
+                        zoom: currentZoom,
+                        bearing: currentBearing,
+                        pitch: currentPitch
+                    });
+                });
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Leaflet 基本の地図</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { width: 100%; height: 100vh; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const map = L.map('map').setView([35.6812, 139.7671], 12);
+        
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+        
+        const stations = [
+            { name: '東京駅', lat: 35.6812, lng: 139.7671 },
+            { name: '新宿駅', lat: 35.6896, lng: 139.7006 },
+            { name: '渋谷駅', lat: 35.6580, lng: 139.7016 },
+            { name: '品川駅', lat: 35.6284, lng: 139.7387 },
+            { name: '池袋駅', lat: 35.7295, lng: 139.7109 }
+        ];
+        
+        stations.forEach(function(station) {
+            L.marker([station.lat, station.lng])
+                .addTo(map)
+                .bindPopup('<b>' + station.name + '</b>');
+        });
+        
+        L.circle([35.6812, 139.7671], {
+            color: 'red',
+            fillColor: '#f03',
+            fillOpacity: 0.2,
+            radius: 5000
+        }).addTo(map).bindPopup('東京駅から半径5km');
+    </script>
+</body>
+</html>

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>MapLibre 路線表示</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { width: 100%; height: 100vh; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script>
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                version: 8,
+                // グリフ（フォント）の指定
+                glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+                sources: {
+                    'gsi-pale': {
+                        type: 'raster',
+                        tiles: ['https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png'],
+                        tileSize: 256
+                    }
+                },
+                layers: [{
+                    id: 'gsi-pale-layer',
+                    type: 'raster',
+                    source: 'gsi-pale'
+                }]
+            },
+            center: [139.62, 35.67],
+            zoom: 11
+        });
+        
+        map.on('load', function() {
+            fetch('./line.geojson')
+                .then(response => response.json())
+                .then(data => {
+                    map.addSource('railway', {
+                        type: 'geojson',
+                        data: data
+                    });
+                    
+                    // 路線（線）
+                    map.addLayer({
+                        id: 'railway-line',
+                        type: 'line',
+                        source: 'railway',
+                        paint: {
+                            'line-color': '#FF3399',
+                            'line-width': 4
+                        }
+                    });
+                    
+                    // 路線名ラベル
+                    map.addLayer({
+                        id: 'railway-label',
+                        type: 'symbol',
+                        source: 'railway',
+                        layout: {
+                            'text-field': ['get', 'name'],  // GeoJSONのnameプロパティを使用
+                            'text-font': ['Noto Sans Regular'],
+                            'text-size': 14,
+                            'symbol-placement': 'line',  // 線に沿って配置
+                            'text-rotation-alignment': 'map',
+                            'text-pitch-alignment': 'viewport'
+                        },
+                        paint: {
+                            'text-color': '#333',
+                            'text-halo-color': '#fff',
+                            'text-halo-width': 2
+                        }
+                    });
+                    
+                    // クリックで路線名を表示
+                    map.on('click', 'railway-line', function(e) {
+                        const properties = e.features[0].properties;
+                        new maplibregl.Popup()
+                            .setLngLat(e.lngLat)
+                            .setHTML('<strong>' + properties.name + '</strong>')
+                            .addTo(map);
+                    });
+                    
+                    // カーソル変更
+                    map.on('mouseenter', 'railway-line', function() {
+                        map.getCanvas().style.cursor = 'pointer';
+                    });
+                    
+                    map.on('mouseleave', 'railway-line', function() {
+                        map.getCanvas().style.cursor = '';
+                    });
+                });
+        });
+    </script>
+</body>
+</html>
