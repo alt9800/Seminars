@@ -20,12 +20,12 @@
 
 - [decl.gl](./deckgl-comp/)
 
-- [decl.gl(グリッド表示)](./deckgl-01-grid/)
+- [decl.gl(グリッド表示)](./deckgl-ext01-grid/)
 
-- [decl.gl(h3 ヘキサゴンレイヤー表示)](./deckgl-02-hex/)
+- [decl.gl(h3 ヘキサゴンレイヤー表示)](./deckgl-ext02-hex/)
 
-- [decl.gl(アーク表示)](./deckgl-03-arc/)
+- [decl.gl(アーク表示)](./deckgl-ext03-arc/)
 
-- [decl.gl(ヒートマップ表示)](./deckgl-04-heatmap/)
+- [decl.gl(ヒートマップ表示)](./deckgl-ext04-heatmap/)
 
 
