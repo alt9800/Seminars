@@ -1,13 +1,31 @@
-ハンズオンコード完成版
+# ハンズオンコード完成版
+
+## Leaflet編
 
 - [Leaflet](./leaflet/)
 
-- [MapLibre GL JS](./maplibre/)
+## MapLibre GL JS 編
 
-- [MapLibre GL JS(データの装飾サンプル)](./maplibre+/)
+- [MapLibre GL JS](./maplibre-comp/)
 
-- [decl.gl](./deckgl/)
+- [MapLibre GL JS(地図表示の変更)](./maplibre-ext01-Switch/)
 
-- [dataフォルダ](./data/)
+- [MapLibre GL JS(Lineパスの表示)](./maplibre-ext02-Line/)
+
+- [MapLibre GL JS(ヒートマップの表示)](./maplibre-ext03-heatmap/)
+
+- [MapLibre GL JS(クラスターの表示)](./maplibre-ext04-cluster/)
+
+## deck.gl 編
+
+- [decl.gl](./deckgl-comp/)
+
+- [decl.gl(グリッド表示)](./deckgl-01-grid/)
+
+- [decl.gl(h3 ヘキサゴンレイヤー表示)](./deckgl-02-hex/)
+
+- [decl.gl(アーク表示)](./deckgl-03-arc/)
+
+- [decl.gl(ヒートマップ表示)](./deckgl-04-heatmap/)
 
 

@@ -808,6 +808,36 @@ https://zenn.dev/asahina820/books/c29592e397a35b
 deckgl = new deck.DeckGL({
 ```
 
+---
+
+### ⚠️ライセンス表記を忘れずに！
+
+```html
+<style>
+    .map-attribution {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        background: rgba(255, 255, 255, 0.9);
+        padding: 3px 8px;
+        font-size: 9px;
+        font-family: Arial, sans-serif;
+        z-index: 1000;
+        border-top-left-radius: 3px;
+    }
+    .map-attribution a {
+        color: #0078A8;
+        text-decoration: none;
+        margin: 0 3px;
+    }
+</style>
+
+<div class="map-attribution">
+        © <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap Contributors</a> |
+        © <a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">GSI</a> |
+        © <a href="https://carto.com/attributions" target="_blank">CARTO</a>
+</div>
+```
 
 
 ---
