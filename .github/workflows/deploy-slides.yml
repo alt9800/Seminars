@@ -6,6 +6,7 @@ on:
       - '*/slide.md'
       - '*/handson/**'
       - '*/assets/**'
+      - '*/Assets/**'
       - '.github/workflows/deploy-seminar-materials.yml'
   workflow_dispatch:
 
@@ -48,9 +49,12 @@ jobs:
               # アセットディレクトリを作成
               mkdir -p "output/slides/$DATE_DIR"
               
-              # アセットと画像をコピー
+              # アセットと画像をコピー（大文字小文字両対応）
               if [ -d "$DATE_DIR/assets" ]; then
                 cp -r "$DATE_DIR/assets" "output/slides/$DATE_DIR/"
+              fi
+              if [ -d "$DATE_DIR/Assets" ]; then
+                cp -r "$DATE_DIR/Assets" "output/slides/$DATE_DIR/assets/"
               fi
               
               # 画像ファイルをコピー
@@ -65,14 +69,21 @@ jobs:
               echo "  Copying Markdown..."
               cp "$DATE_DIR/slide.md" "output/slides/$DATE_DIR.md"
               
-              # 画像パスを調整
+              # 画像パスを調整（小文字assets）
               sed -i "s|!\[\([^]]*\)\](assets/\([^)]*\))|![\1]($DATE_DIR/assets/\2)|g" "output/slides/$DATE_DIR.md"
               sed -i "s|!\[\([^]]*\)\](./assets/\([^)]*\))|![\1]($DATE_DIR/assets/\2)|g" "output/slides/$DATE_DIR.md"
+              
+              # 画像パスを調整（大文字Assets）
+              sed -i "s|!\[\([^]]*\)\](Assets/\([^)]*\))|![\1]($DATE_DIR/assets/\2)|g" "output/slides/$DATE_DIR.md"
+              sed -i "s|!\[\([^]]*\)\](./Assets/\([^)]*\))|![\1]($DATE_DIR/assets/\2)|g" "output/slides/$DATE_DIR.md"
+              
               sed -i "s|!\[\([^]]*\)\](\([^/:)][^)]*\))|![\1]($DATE_DIR/\2)|g" "output/slides/$DATE_DIR.md"
               
-              # HTMLタグの画像パスも調整
+              # HTMLタグの画像パスも調整（両対応）
               sed -i "s|<img\([^>]*\)src=\"assets/|<img\1src=\"$DATE_DIR/assets/|g" "output/slides/$DATE_DIR.md"
               sed -i "s|<img\([^>]*\)src=\"./assets/|<img\1src=\"$DATE_DIR/assets/|g" "output/slides/$DATE_DIR.md"
+              sed -i "s|<img\([^>]*\)src=\"Assets/|<img\1src=\"$DATE_DIR/assets/|g" "output/slides/$DATE_DIR.md"
+              sed -i "s|<img\([^>]*\)src=\"./Assets/|<img\1src=\"$DATE_DIR/assets/|g" "output/slides/$DATE_DIR.md"
               
               # 重複を防ぐ
               sed -i "s|$DATE_DIR/$DATE_DIR|$DATE_DIR|g" "output/slides/$DATE_DIR.md"
