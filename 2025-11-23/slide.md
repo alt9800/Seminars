@@ -920,6 +920,45 @@ getTooltip: ({object}) => object && object.name && {
 
 ---
 
+具体的には
+```js
+        // Deck.glの初期化
+        deckgl = new deck.DeckGL({
+            container: 'map',
+            initialViewState: {
+                longitude: 139.65,
+                latitude: 35.67,
+                zoom: 11,
+                pitch: 0,
+                bearing: 0
+            },
+            controller: true,
+
+```
+の後に併記します。
+
+
+---
+
+```js
+                new deck.ScatterplotLayer({
+                    id: 'stations',
+                    data: stationsData,
+                    getPosition: d => d.coordinates,
+                    getRadius: d => Math.sqrt(d.passengers) * 2,
+                    getFillColor: [255, 140, 0],
+                    pickable: true,
+                    radiusMinPixels: 5,
+                    radiusMaxPixels: 50,
+                    autoHighlight: true,
+                    highlightColor: [255, 255, 0, 150]
+                })
+```
+
+みたいにハイライトを与えるとインタラクティブでGood。
+
+---
+
 ## Step 5: GeoJSON形式でパスを表示
 
 `stationsData` の後に以下を追加：
@@ -964,19 +1003,70 @@ getTooltip: ({object}) => object && object.name && {
 
 ---
 
-`changeBaseMap` 関数と初期表示の `layers` 配列に `PathLayer` を追加：
+初期表示の `layers` を更新：
 
-```javascript                    
-// PathLayer - GeoJSON形式の路線
+```js
+
+layers: [
+                createTileLayer('osm'),
+                // PathLayer - GeoJSON形式の路線
+                new deck.PathLayer({
+                    id: 'path-layer',
+                    data: pathData.features,
+                    getPath: d => d.geometry.coordinates,
+                    getColor: d => d.properties.color,
+                    getWidth: 40,
+                    widthMinPixels: 2,
+                    pickable: true
+                }),
+                new deck.ScatterplotLayer({
+                    id: 'stations',
+                    data: stationsData,
+                    getPosition: d => d.coordinates,
+                    getRadius: d => Math.sqrt(d.passengers) * 2,
+                    getFillColor: [255, 140, 0],
+                    pickable: true,
+                    radiusMinPixels: 5,
+                    radiusMaxPixels: 50,
+                    autoHighlight: true,
+                    highlightColor: [255, 255, 0, 150]
+                })
+            ]
+```
+
+---
+
+`changeBaseMap` 関数も更新：
+
+```js
+function changeBaseMap(mapKey) {
+            deckgl.setProps({
+                layers: [
+                    createTileLayer(mapKey),
                     new deck.PathLayer({
                         id: 'path-layer',
                         data: pathData.features,
                         getPath: d => d.geometry.coordinates,
                         getColor: d => d.properties.color,
-                        getWidth: 5,
+                        getWidth: 40,
                         widthMinPixels: 2,
                         pickable: true
                     }),
+                    new deck.ScatterplotLayer({
+                        id: 'stations',
+                        data: stationsData,
+                        getPosition: d => d.coordinates,
+                        getRadius: d => Math.sqrt(d.passengers) * 2,
+                        getFillColor: [255, 140, 0],
+                        pickable: true,
+                        radiusMinPixels: 5,
+                        radiusMaxPixels: 50,
+                        autoHighlight: true,
+                        highlightColor: [255, 255, 0, 150]
+                    })
+                ]
+            });
+        }
 ```
 
 ---
