@@ -715,7 +715,7 @@ https://zenn.dev/asahina820/books/c29592e397a35b
 ---
 
 ## Step 2: 背景地図切り替え機能を追加
-<div id="map"></div> の下に以下を追加：
+`<div id="map"></div>` の下に以下を追加：
 
 ```html
 <div id="controls">
@@ -723,7 +723,7 @@ https://zenn.dev/asahina820/books/c29592e397a35b
         <button onclick="changeBaseMap('osm')">OpenStreetMap</button>
         <button onclick="changeBaseMap('gsi')">国土地理院</button>
         <button onclick="changeBaseMap('carto')">Carto Light</button>
-    </div>
+</div>
 ```
 
 ---
