@@ -37,6 +37,8 @@ style: |
 # 計画行政学会 GIS 分科会 可視化セミナー
 # WebGISはじめの一歩、自分でコントロールする可視化基盤
 
+資料 : https://alt9800.github.io/Seminars/
+
 ---
 
 
