@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>三つのエンジンで見る高さの表現</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+<link rel="stylesheet" href="https://cesium.com/downloads/cesiumjs/releases/1.118/Build/Cesium/Widgets/widgets.css">
+<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<script src="https://cesium.com/downloads/cesiumjs/releases/1.118/Build/Cesium/Cesium.js"></script>
+<script src="https://unpkg.com/deck.gl@9/dist.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    color: #222;
+    background: #fafaf7;
+    line-height: 1.7;
+  }
+  header, .note { max-width: 1200px; margin: 0 auto; padding: 16px 20px; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  h2 { font-size: 1.05rem; margin: 0; }
+  p { margin: 4px 0; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px 20px;
+  }
+  .pane {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .pane-head { padding: 10px 12px; border-bottom: 1px solid #eee; }
+  .map {
+    position: relative;
+    touch-action: none;
+    width: 100%;
+    height: 55vh;
+    min-height: 320px;
+  }
+  .pane-body { padding: 10px 12px; font-size: 0.9rem; }
+  code, pre {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 0.82rem;
+  }
+  pre {
+    background: #f3f3ef;
+    padding: 8px;
+    border-radius: 4px;
+    overflow-x: auto;
+    margin: 6px 0;
+  }
+  .coord { color: #444; word-break: break-all; }
+  .attr {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.85);
+    font-size: 11px;
+    padding: 2px 6px;
+    z-index: 1;
+  }
+  .attr a { color: #333; }
+  .common-attr {
+    max-width: 1200px;
+    margin: -8px auto 0;
+    padding: 0 20px;
+    font-size: 0.85rem;
+    color: #555;
+  }
+  .controls {
+    max-width: 1200px;
+    margin: 0 auto 12px;
+    padding: 10px 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    align-items: center;
+    font-size: 0.9rem;
+  }
+  .controls label { display: flex; align-items: center; gap: 6px; }
+  .controls input[type="range"] { width: 160px; }
+  .controls output { min-width: 3.5em; font-variant-numeric: tabular-nums; }
+  .controls button {
+    font: inherit;
+    padding: 4px 12px;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+  }
+  @media (max-width: 900px) {
+    .grid { grid-template-columns: 1fr; }
+    .map { height: 50vh; }
+    .controls input[type="range"] { width: 120px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>三つのエンジンで見る高さの表現</h1>
+  <p>同じ地形データ（Mapterhorn）と同じ地点（富士山頂、標高3776m）を、MapLibre GL JS・CesiumJS・deck.gl の三つで表示しています。</p>
+  <p>どのエンジンにも「経度・緯度・高さ」を渡しているだけですが、エンジンの内部ではそれぞれ別の座標に置き換えられています。各地図の下に、その内部の座標を表示しています。</p>
+</header>
+
+<div class="controls">
+  <label>方位 <input id="bearing" type="range" min="-180" max="180" step="1" value="-10"><output id="bearing-out">-10°</output></label>
+  <label>傾き <input id="pitch" type="range" min="0" max="80" step="1" value="60"><output id="pitch-out">60°</output></label>
+  <label>ズーム <input id="zoom" type="range" min="9" max="14" step="0.1" value="11.5"><output id="zoom-out">11.5</output></label>
+  <label><input id="spin" type="checkbox"> 山頂を中心に自動で回す</label>
+  <label><input id="drag-rotate" type="checkbox" checked> CesiumJS・deck.glは左ドラッグで回す</label>
+  <button id="reset" type="button">初期位置に戻す</button>
+  <p style="flex-basis:100%;margin:0;color:#555;">スライダーを動かすと、三つの地図が同じ向き・同じ傾きで富士山頂を中心に回ります。各地図はマウスでも個別に動かせます（操作方法はエンジンごとに少し異なります）。</p>
+</div>
+
+<div class="grid">
+
+  <section class="pane">
+    <div class="pane-head"><h2>MapLibre GL JS</h2></div>
+    <div id="maplibre" class="map"></div>
+    <div class="pane-body">
+      <p>平らな地図（Webメルカトル）を、DEM画像の値で持ち上げて地形にします。</p>
+<pre>map.setTerrain({ source: 'dem' });
+MercatorCoordinate.fromLngLat([経度, 緯度], 高さ)</pre>
+      <p>内部の座標（0〜1のメルカトル座標）：</p>
+      <p class="coord" id="maplibre-coord">計算中</p>
+    </div>
+  </section>
+
+  <section class="pane">
+    <div class="pane-head"><h2>CesiumJS</h2></div>
+    <div id="cesium" class="map"></div>
+    <div class="pane-body">
+      <p>楕円体（丸い地球）の上に、三角形の面で地形を作ります。ここではDEM画像を読み、その場で面に変換しています。</p>
+<pre>Cartesian3.fromDegrees(経度, 緯度, 高さ)</pre>
+      <p>内部の座標（地球の中心が原点、単位はm）：</p>
+      <p class="coord" id="cesium-coord">計算中</p>
+    </div>
+  </section>
+
+  <section class="pane">
+    <div class="pane-head"><h2>deck.gl</h2></div>
+    <div id="deck" class="map">
+      <div class="attr">
+        <a href="https://mapterhorn.com/attribution" target="_blank" rel="noopener">© Mapterhorn</a> |
+        <a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>
+      </div>
+    </div>
+    <div class="pane-body">
+      <p>DEM画像から、その場で三角形の面を組み立てて地形にします。</p>
+<pre>getPosition: d =&gt; [経度, 緯度, 高さ]</pre>
+      <p>内部の座標（共通座標。ズーム0で世界が512単位）：</p>
+      <p class="coord" id="deck-coord">計算中</p>
+    </div>
+  </section>
+
+</div>
+
+<p class="common-attr">出典（三つの地図に共通）：地形 <a href="https://mapterhorn.com/attribution" target="_blank" rel="noopener">© Mapterhorn</a>、写真 <a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院 全国最新写真（シームレス）</a>。各地図内の出典表示は、それぞれのエンジンの標準の表示です（deck.glには標準の表示がないため、同じ内容を地図の左下に付けています）。</p>
+
+<div class="note">
+  <h2>このページで見てほしいこと</h2>
+  <p>三つとも、渡しているのは同じ「138.7274, 35.3606, 3776」です。内部の座標は、MapLibreでは0〜1の範囲の小さな数、CesiumJSでは地球の中心からの数百万m、deck.glでは0〜512の範囲の数になっています。この違いを開発者が意識しなくてよいように、エンジンが変換を引き受けています。</p>
+  <p>このページでは、地形も地点も同じ「標高」で渡しているので、三つとも山頂に点が乗ります。CesiumJSでは本来、高さは楕円体からの高さとして解釈されます。そのため、楕円体高で作られた地形データ（Cesium World Terrainなど）と標高のデータを混ぜると、ジオイド高の分だけずれます。</p>
+</div>
+
+<script>
+const LNG = 138.7274;
+const LAT = 35.3606;
+const H = 3776;
+
+const PHOTO = 'https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg';
+const TERRAIN_TILEJSON = 'https://tiles.mapterhorn.com/tilejson.json';
+const TERRARIUM = { rScaler: 256, gScaler: 1, bScaler: 1 / 256, offset: -32768 };
+
+function show(id, values, digits) {
+  document.getElementById(id).textContent =
+    'x = ' + values[0].toFixed(digits) +
+    ', y = ' + values[1].toFixed(digits) +
+    ', z = ' + values[2].toFixed(digits);
+}
+
+// 三つの地図で共有するカメラの状態（方位・傾きはMapLibreの考え方に合わせる）
+const INITIAL_VIEW = { bearing: -10, pitch: 60, zoom: 11.5 };
+const view = { ...INITIAL_VIEW };
+
+// ---------- MapLibre GL JS ----------
+const map = new maplibregl.Map({
+  container: 'maplibre',
+  center: [LNG, LAT],
+  zoom: 11.5,
+  pitch: 65,
+  bearing: -10,
+  maxPitch: 85,
+  style: {
+    version: 8,
+    sources: {
+      photo: {
+        type: 'raster',
+        tiles: [PHOTO],
+        tileSize: 256,
+        maxzoom: 18,
+        attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'
+      },
+      dem: {
+        type: 'raster-dem',
+        url: TERRAIN_TILEJSON,
+        encoding: 'terrarium',
+        attribution: '<a href="https://mapterhorn.com/attribution">© Mapterhorn</a>'
+      }
+    },
+    layers: [{ id: 'photo', type: 'raster', source: 'photo' }],
+    terrain: { source: 'dem', exaggeration: 1 }
+  }
+});
+// マーカーは地形の上に自動で載る
+new maplibregl.Marker({ color: '#c62828' }).setLngLat([LNG, LAT]).addTo(map);
+
+const mc = maplibregl.MercatorCoordinate.fromLngLat([LNG, LAT], H);
+show('maplibre-coord', [mc.x, mc.y, mc.z], 10);
+
+// ---------- CesiumJS ----------
+const viewer = new Cesium.Viewer('cesium', {
+  baseLayer: new Cesium.ImageryLayer(new Cesium.UrlTemplateImageryProvider({
+    url: PHOTO,
+    maximumLevel: 18,
+    credit: new Cesium.Credit('国土地理院')
+  })),
+  baseLayerPicker: false,
+  geocoder: false,
+  timeline: false,
+  animation: false,
+  homeButton: false,
+  sceneModePicker: false,
+  navigationHelpButton: false,
+  fullscreenButton: false,
+  infoBox: false,
+  selectionIndicator: false
+});
+
+const cpos = Cesium.Cartesian3.fromDegrees(LNG, LAT, H);
+viewer.entities.add({
+  position: cpos,
+  point: {
+    pixelSize: 12,
+    color: Cesium.Color.fromCssColorString('#c62828'),
+    outlineColor: Cesium.Color.WHITE,
+    outlineWidth: 2,
+    disableDepthTestDistance: Number.POSITIVE_INFINITY
+  }
+});
+show('cesium-coord', [cpos.x, cpos.y, cpos.z], 1);
+
+// Terrarium形式のDEM画像を読み、Cesiumの地形（高さの格子）に変換する
+async function setupCesiumTerrain(template, maxZoom) {
+  const SIZE = 65;
+  const cache = new Map();
+
+  function loadTile(z, x, y) {
+    const key = z + '/' + x + '/' + y;
+    if (!cache.has(key)) {
+      const url = template.replace('{z}', z).replace('{x}', x).replace('{y}', y);
+      cache.set(key, fetch(url)
+        .then(r => { if (!r.ok) throw new Error(r.status); return r.blob(); })
+        .then(b => createImageBitmap(b))
+        .then(img => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          ctx.drawImage(img, 0, 0);
+          return { w: img.width, h: img.height, data: ctx.getImageData(0, 0, img.width, img.height).data };
+        }));
+    }
+    return cache.get(key);
+  }
+
+  viewer.terrainProvider = new Cesium.CustomHeightmapTerrainProvider({
+    width: SIZE,
+    height: SIZE,
+    tilingScheme: new Cesium.WebMercatorTilingScheme(),
+    credit: new Cesium.Credit('© Mapterhorn'),
+    callback: async (x, y, level) => {
+      // 用意されたズームより細かいときは、親タイルの一部を使う
+      const z = Math.min(level, maxZoom);
+      const d = level - z;
+      const n = 1 << d;
+      const px = x >> d;
+      const py = y >> d;
+      const ox = (x - px * n) / n;
+      const oy = (y - py * n) / n;
+
+      const heights = new Float32Array(SIZE * SIZE);
+      let tile;
+      try {
+        tile = await loadTile(z, px, py);
+      } catch (e) {
+        return heights;
+      }
+      for (let j = 0; j < SIZE; j++) {
+        for (let i = 0; i < SIZE; i++) {
+          const u = ox + (i / (SIZE - 1)) / n;
+          const v = oy + (j / (SIZE - 1)) / n;
+          const sx = Math.min(tile.w - 1, Math.floor(u * tile.w));
+          const sy = Math.min(tile.h - 1, Math.floor(v * tile.h));
+          const k = (sy * tile.w + sx) * 4;
+          const r = tile.data[k], g = tile.data[k + 1], b = tile.data[k + 2];
+          heights[j * SIZE + i] = r * 256 + g + b / 256 - 32768;
+        }
+      }
+      return heights;
+    }
+  });
+}
+
+// ---------- deck.gl ----------
+let deckgl = null;
+
+function deckViewState() {
+  return {
+    longitude: LNG,
+    latitude: LAT,
+    zoom: view.zoom,
+    pitch: view.pitch,
+    bearing: view.bearing,
+    maxPitch: 85
+  };
+}
+
+function setupDeck(template, maxZoom) {
+  deckgl = new deck.DeckGL({
+    container: 'deck',
+    initialViewState: deckViewState(),
+    controller: deckController(),
+    layers: [
+      new deck.TerrainLayer({
+        id: 'terrain',
+        minZoom: 0,
+        maxZoom: maxZoom,
+        elevationData: template,
+        texture: PHOTO,
+        elevationDecoder: TERRARIUM
+      }),
+      new deck.ScatterplotLayer({
+        id: 'summit',
+        data: [{ position: [LNG, LAT, H] }],
+        getPosition: d => d.position,
+        getRadius: 7,
+        radiusUnits: 'pixels',
+        billboard: true,
+        stroked: true,
+        getFillColor: [198, 40, 40],
+        getLineColor: [255, 255, 255],
+        getLineWidth: 2,
+        lineWidthUnits: 'pixels',
+        parameters: { depthCompare: 'always' }
+      })
+    ]
+  });
+
+  const vp = new deck.WebMercatorViewport({
+    width: 512, height: 512, longitude: LNG, latitude: LAT, zoom: 0
+  });
+  show('deck-coord', vp.projectPosition([LNG, LAT, H]), 6);
+}
+
+// ---------- 地形タイルのURLをTileJSONから取得して、CesiumとdeckにDEMを渡す ----------
+fetch(TERRAIN_TILEJSON)
+  .then(r => r.json())
+  .then(tj => {
+    const template = tj.tiles[0];
+    const maxZoom = tj.maxzoom ?? 12;
+    setupCesiumTerrain(template, maxZoom);
+    setupDeck(template, maxZoom);
+  })
+  .catch(e => {
+    console.error('地形タイルの情報を取得できませんでした', e);
+  });
+
+// ---------- 三つの地図のカメラをそろえて動かす ----------
+// MapLibreのズームから、画面中央での1ピクセルあたりの距離（m）を求め、
+// Cesiumのカメラ距離に換算する（Cesiumの縦の視野角は60度）
+function cesiumRange() {
+  const metersPerPixel = 40075016.686 * Math.cos(LAT * Math.PI / 180) / (512 * Math.pow(2, view.zoom));
+  const heightPx = document.getElementById('cesium').clientHeight;
+  return heightPx * metersPerPixel / (2 * Math.tan(Math.PI / 6));
+}
+
+function applyView() {
+  // MapLibre：方位は北から時計回り、傾きは真上から見下ろすときが0度
+  map.jumpTo({ center: [LNG, LAT], zoom: view.zoom, bearing: view.bearing, pitch: view.pitch });
+
+  // deck.gl：MapLibreと同じ考え方の値をそのまま渡せる
+  if (deckgl) deckgl.setProps({ initialViewState: deckViewState() });
+
+  // CesiumJS：山頂を注視点にして、方位・見下ろす角度・距離でカメラを置く
+  // 見下ろす角度は水平が0度、真下が-90度なので、MapLibreの傾きから90を引く
+  viewer.camera.lookAt(cpos, new Cesium.HeadingPitchRange(
+    Cesium.Math.toRadians(view.bearing),
+    Cesium.Math.toRadians(view.pitch - 90),
+    cesiumRange()
+  ));
+  // 注視点への固定を外し、マウスで自由に動かせるようにする
+  viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+
+  document.getElementById('bearing-out').textContent = Math.round(view.bearing) + '°';
+  document.getElementById('pitch-out').textContent = Math.round(view.pitch) + '°';
+  document.getElementById('zoom-out').textContent = view.zoom.toFixed(1);
+}
+
+const bearingInput = document.getElementById('bearing');
+const pitchInput = document.getElementById('pitch');
+const zoomInput = document.getElementById('zoom');
+const spinInput = document.getElementById('spin');
+
+bearingInput.addEventListener('input', () => { view.bearing = Number(bearingInput.value); applyView(); });
+pitchInput.addEventListener('input', () => { view.pitch = Number(pitchInput.value); applyView(); });
+zoomInput.addEventListener('input', () => { view.zoom = Number(zoomInput.value); applyView(); });
+
+document.getElementById('reset').addEventListener('click', () => {
+  Object.assign(view, INITIAL_VIEW);
+  bearingInput.value = view.bearing;
+  pitchInput.value = view.pitch;
+  zoomInput.value = view.zoom;
+  spinInput.checked = false;
+  applyView();
+});
+
+// ---------- マウス・タッチ操作の割り当て ----------
+// 右クリックでブラウザのメニューが出て操作が止まるのを防ぐ
+['cesium', 'deck'].forEach(id => {
+  document.getElementById(id).addEventListener('contextmenu', e => e.preventDefault());
+});
+
+const dragRotateInput = document.getElementById('drag-rotate');
+
+// deck.gl：dragModeで左ドラッグの役割を切り替える。touchRotateは二本指での回転
+function deckController() {
+  return {
+    dragMode: dragRotateInput.checked ? 'rotate' : 'pan',
+    touchRotate: true
+  };
+}
+
+// CesiumJS：左ドラッグを「注視点のまわりを回す（tilt）」に割り当てる
+const ssc = viewer.scene.screenSpaceCameraController;
+const E = Cesium.CameraEventType;
+const cesiumDefault = {
+  rotate: ssc.rotateEventTypes,
+  tilt: ssc.tiltEventTypes,
+  zoom: ssc.zoomEventTypes
+};
+
+function applyDragMode() {
+  if (dragRotateInput.checked) {
+    ssc.tiltEventTypes = [E.LEFT_DRAG, E.MIDDLE_DRAG, E.PINCH];
+    ssc.rotateEventTypes = [E.RIGHT_DRAG];
+    ssc.zoomEventTypes = [E.WHEEL, E.PINCH];
+  } else {
+    ssc.tiltEventTypes = cesiumDefault.tilt;
+    ssc.rotateEventTypes = cesiumDefault.rotate;
+    ssc.zoomEventTypes = cesiumDefault.zoom;
+  }
+  if (deckgl) deckgl.setProps({ controller: deckController() });
+}
+
+dragRotateInput.addEventListener('change', applyDragMode);
+applyDragMode();
+
+// 自動回転：1フレームごとに方位を少しずつ進める
+function tick() {
+  if (spinInput.checked) {
+    view.bearing += 0.2;
+    if (view.bearing > 180) view.bearing -= 360;
+    bearingInput.value = view.bearing;
+    applyView();
+  }
+  requestAnimationFrame(tick);
+}
+
+applyView();
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>

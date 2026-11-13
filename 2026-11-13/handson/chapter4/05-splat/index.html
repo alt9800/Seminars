@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Splat を地図に置く（CesiumJS）</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.147.0/Build/Cesium/Widgets/widgets.css">
+<script src="https://cdn.jsdelivr.net/npm/cesium@1.147.0/Build/Cesium/Cesium.js"></script>
+<style>
+  :root{ --bg:#f6f5f1; --panel:#fff; --ink:#222; --sub:#666; --line:#d9d6cd; --accent:#2f5d8a; }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font-family:"Hiragino Sans","Noto Sans JP","Yu Gothic",system-ui,sans-serif}
+  .app{display:grid;grid-template-columns:1fr 320px;height:100vh;height:100dvh}
+  #view{position:relative;min-width:0;min-height:0}
+  #cesium{position:absolute;inset:0}
+  .status{position:absolute;left:10px;top:10px;z-index:2;background:rgba(255,255,255,.93);border:1px solid var(--line);
+    padding:6px 10px;font-size:12px;line-height:1.6;max-width:calc(100% - 20px)}
+  .drop{position:absolute;inset:16px;z-index:3;border:2px dashed var(--accent);background:rgba(255,255,255,.85);
+    display:none;align-items:center;justify-content:center;color:var(--accent);font-size:14px}
+  .drop.on{display:flex}
+  .panel{background:var(--panel);border-left:1px solid var(--line);padding:14px 16px;overflow:auto}
+  h1{font-size:15px;margin:0 0 8px;font-weight:600}
+  h2{font-size:13px;margin:16px 0 6px;font-weight:600;color:var(--sub)}
+  .f{display:grid;grid-template-columns:72px 1fr;gap:5px 8px;align-items:center;font-size:12px}
+  .f input{width:100%;padding:4px 6px;font:inherit;font-size:12px;border:1px solid var(--line);border-radius:3px}
+  .f input[type=range]{padding:0;accent-color:var(--accent)}
+  button,.file{display:inline-block;padding:6px 10px;margin:2px 4px 2px 0;font:inherit;font-size:12px;
+    border:1px solid var(--line);border-radius:4px;background:#fff;color:var(--ink);cursor:pointer}
+  button:hover,.file:hover{border-color:var(--accent)}
+  button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .file input{display:none}
+  .note{font-size:11px;color:var(--sub);line-height:1.7;margin:6px 0 0}
+  .cesium-widget-credits{font-size:11px}
+  @media (max-width:760px){
+    .app{grid-template-columns:1fr;grid-template-rows:auto auto;height:auto}
+    #view{height:60vh;height:60dvh}
+    .panel{border-left:0;border-top:1px solid var(--line)}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div id="view">
+    <div id="cesium"></div>
+    <div class="status" id="status">.spz をドロップしてください</div>
+    <div class="drop" id="drop">ここにドロップ</div>
+  </div>
+  <div class="panel">
+    <h1>Splat を地図に置く</h1>
+    <label class="file">.spz を選ぶ<input type="file" id="file" accept=".spz"></label>
+    <button id="pick">地図クリックで位置指定</button>
+    <button id="fly">Splatへ移動</button>
+    <button id="toPin">ピンに合わせる</button>
+
+    <h2>背景地図</h2>
+    <div class="f">
+      <span>OSM</span><input type="range" id="osm" min="0" max="1" step="0.05" value="0">
+    </div>
+    <p class="note">0で空中写真のみ、1でOSMのみ。中間で重ねて表示します。</p>
+
+    <h2>カメラ</h2>
+    <button id="orbit">Splat中心で回す</button>
+    <p class="note">通常時：左ドラッグで移動、右ドラッグかホイールで拡大縮小、Ctrl＋左ドラッグ（または中ボタンドラッグ）で回転・傾き。「Splat中心で回す」中は左ドラッグでSplatの周りを回ります。</p>
+
+    <h2>位置</h2>
+    <div class="f">
+      <span>緯度</span><input type="number" id="lat" step="0.000001" value="35.626143">
+      <span>経度</span><input type="number" id="lng" step="0.000001" value="134.809752">
+      <span>高さ(m)</span><input type="number" id="h" step="0.1" value="0">
+    </div>
+    <p class="note">地形を読み込んでいないため、地面は楕円体面（高さ0）です。実地形の上に置く場合は「標高＋ジオイド高」を入れます。</p>
+
+    <h2>向き・縮尺</h2>
+    <div class="f">
+      <span>方位(度)</span><input type="range" id="heading" min="-180" max="180" step="0.5" value="0">
+      <span></span><input type="number" id="headingN" step="0.5" value="0">
+      <span>ピッチ</span><input type="number" id="pitch" step="0.5" value="0">
+      <span>ロール</span><input type="number" id="roll" step="0.5" value="0">
+      <span>縮尺</span><input type="number" id="scale" step="0.01" value="1">
+    </div>
+
+    <h2>書き出し</h2>
+    <button id="export">tileset.json と content.glb</button>
+    <p class="note">書き出した2ファイルを同じフォルダに置けば、<code>Cesium3DTileset.fromUrl('tileset.json')</code> で読めます。配置は下の値を modelMatrix に与えます。</p>
+    <textarea id="out" readonly style="width:100%;height:96px;font:11px/1.5 ui-monospace,Menlo,monospace;border:1px solid var(--line);border-radius:4px;padding:6px"></textarea>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   SPZ → glTF(KHR_gaussian_splatting + _compression_spz_2) → 3D Tiles
+   変換はブラウザ内で完結。SPZ本体は再圧縮せずそのまま GLB に格納する。
+   ============================================================ */
+const EXT_GS = 'KHR_gaussian_splatting';
+const EXT_SPZ = 'KHR_gaussian_splatting_compression_spz_2';
+
+async function gunzip(u8){
+  const s = new Blob([u8]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Uint8Array(await new Response(s).arrayBuffer());
+}
+
+// SPZヘッダ(16byte): magic 'NGSP', version, numPoints, shDegree, fractionalBits, flags, reserved
+async function readSpzHeader(spz){
+  const raw = await gunzip(spz);
+  const dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+  if (dv.getUint32(0, true) !== 0x5053474e) throw new Error('SPZ ではありません');
+  const version = dv.getUint32(4, true), n = dv.getUint32(8, true);
+  const shDegree = raw[12], frac = raw[13];
+  // v2以降: 位置は24bit符号付き固定小数点 × 3軸
+  let min = [-1,-1,-1], max = [1,1,1];
+  if (version >= 2){
+    min = [Infinity, Infinity, Infinity]; max = [-Infinity, -Infinity, -Infinity];
+    const scale = 1 / (1 << frac);
+    let o = 16;
+    for (let i = 0; i < n; i++){
+      for (let a = 0; a < 3; a++, o += 3){
+        let v = raw[o] | (raw[o+1] << 8) | (raw[o+2] << 16);
+        if (v & 0x800000) v |= ~0xffffff;
+        const f = v * scale;
+        if (f < min[a]) min[a] = f;
+        if (f > max[a]) max[a] = f;
+      }
+    }
+  }
+  return { version, n, shDegree, min, max };
+}
+
+function buildGlb(spz, hdr){
+  const accessors = [], attributes = {};
+  const add = (name, type, componentType, extra = {}) => {
+    attributes[name] = accessors.length;
+    accessors.push({ count: hdr.n, type, componentType, ...extra });
+  };
+  add('POSITION', 'VEC3', 5126, { min: hdr.min, max: hdr.max });
+  add('COLOR_0', 'VEC4', 5121, { normalized: true });
+  add(`${EXT_GS}:SCALE`, 'VEC3', 5126);
+  add(`${EXT_GS}:ROTATION`, 'VEC4', 5126);
+  for (let l = 1; l <= hdr.shDegree; l++)
+    for (let k = 0; k < 2*l + 1; k++) add(`${EXT_GS}:SH_DEGREE_${l}_COEF_${k}`, 'VEC3', 5126);
+
+  const gltf = {
+    asset: { version: '2.0', generator: 'splat-cesium.html' },
+    extensionsUsed: [EXT_GS, EXT_SPZ],
+    extensionsRequired: [EXT_GS, EXT_SPZ],
+    buffers: [{ byteLength: spz.byteLength }],
+    bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: spz.byteLength }],
+    accessors,
+    meshes: [{ primitives: [{
+      mode: 0, attributes,
+      extensions: { [EXT_GS]: { extensions: { [EXT_SPZ]: { bufferView: 0 } } } },
+    }] }],
+    nodes: [{ mesh: 0 }],
+    scenes: [{ nodes: [0] }], scene: 0,
+  };
+  const enc = new TextEncoder();
+  let json = enc.encode(JSON.stringify(gltf));
+  const jPad = (4 - json.length % 4) % 4, bPad = (4 - spz.byteLength % 4) % 4;
+  const jLen = json.length + jPad, bLen = spz.byteLength + bPad;
+  const out = new Uint8Array(12 + 8 + jLen + 8 + bLen);
+  const dv = new DataView(out.buffer);
+  dv.setUint32(0, 0x46546c67, true); dv.setUint32(4, 2, true); dv.setUint32(8, out.length, true);
+  dv.setUint32(12, jLen, true); dv.setUint32(16, 0x4e4f534a, true);
+  out.set(json, 20); out.fill(0x20, 20 + json.length, 20 + jLen);
+  const b = 20 + jLen;
+  dv.setUint32(b, bLen, true); dv.setUint32(b + 4, 0x004e4942, true);
+  out.set(spz, b + 8);
+  return out;
+}
+
+function buildTileset(hdr, contentUri){
+  const r = Math.max(...hdr.max.map(Math.abs), ...hdr.min.map(Math.abs)) * Math.sqrt(3);
+  return {
+    asset: { version: '1.1' },
+    extensionsUsed: ['3DTILES_content_gltf'],
+    extensionsRequired: ['3DTILES_content_gltf'],
+    extensions: { '3DTILES_content_gltf': { extensionsUsed: [EXT_GS, EXT_SPZ], extensionsRequired: [EXT_GS, EXT_SPZ] } },
+    geometricError: 100,
+    root: { boundingVolume: { sphere: [0, 0, 0, r] }, geometricError: 0, refine: 'ADD', content: { uri: contentUri } },
+  };
+}
+
+/* ============================================================
+   Cesium（ion を使わない構成）
+   ============================================================ */
+const viewer = new Cesium.Viewer('cesium', {
+  baseLayer: new Cesium.ImageryLayer(new Cesium.UrlTemplateImageryProvider({
+    url: 'https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',
+    maximumLevel: 18,
+    credit: new Cesium.Credit('<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル（シームレス空中写真）</a>', true),
+  })),
+  baseLayerPicker: false, geocoder: false, timeline: false, animation: false,
+  homeButton: false, sceneModePicker: false, navigationHelpButton: false, fullscreenButton: false,
+  terrainProvider: new Cesium.EllipsoidTerrainProvider(),
+});
+viewer.scene.globe.depthTestAgainstTerrain = false;
+
+// OpenStreetMap 標準タイル（透明度で空中写真と重ねる）
+const osmLayer = viewer.imageryLayers.addImageryProvider(new Cesium.UrlTemplateImageryProvider({
+  url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  maximumLevel: 19,
+  credit: new Cesium.Credit('<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>', true),
+}));
+osmLayer.alpha = 0; osmLayer.show = false;
+
+// キャリブレーション用の基準ピン（サンプルの中心座標）
+const PIN = { lat: 35.626143, lng: 134.809752 };
+viewer.entities.add({
+  position: Cesium.Cartesian3.fromDegrees(PIN.lng, PIN.lat, 0),
+  billboard: {
+    image: new Cesium.PinBuilder().fromColor(Cesium.Color.fromCssColorString('#b8432f'), 40).toDataURL(),
+    verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+    disableDepthTestDistance: Number.POSITIVE_INFINITY,   // Splatに隠れないよう常に手前に描く
+  },
+  label: {
+    text: `基準 ${PIN.lat}, ${PIN.lng}`,
+    font: '12px sans-serif', fillColor: Cesium.Color.WHITE,
+    outlineColor: Cesium.Color.BLACK, outlineWidth: 3, style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+    pixelOffset: new Cesium.Cartesian2(0, -46), verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+    disableDepthTestDistance: Number.POSITIVE_INFINITY,
+  },
+});
+
+const $ = id => document.getElementById(id);
+const status = $('status');
+let tileset = null, lastGlb = null, lastTileset = null;
+
+function placement(){
+  const lat = +$('lat').value, lng = +$('lng').value, h = +$('h').value;
+  const hpr = new Cesium.HeadingPitchRoll(
+    Cesium.Math.toRadians(+$('headingN').value),
+    Cesium.Math.toRadians(+$('pitch').value),
+    Cesium.Math.toRadians(+$('roll').value));
+  const m = Cesium.Transforms.headingPitchRollToFixedFrame(Cesium.Cartesian3.fromDegrees(lng, lat, h), hpr);
+  Cesium.Matrix4.multiplyByUniformScale(m, +$('scale').value, m);
+  $('out').value = JSON.stringify({ lat, lng, height_ellipsoid_m: h,
+    heading_deg: +$('headingN').value, pitch_deg: +$('pitch').value, roll_deg: +$('roll').value,
+    scale: +$('scale').value }, null, 1);
+  return m;
+}
+function apply(){ const m = placement(); if (tileset) tileset.modelMatrix = m; }
+
+async function load(file){
+  try{
+    status.textContent = `変換中：${file.name}`;
+    const spz = new Uint8Array(await file.arrayBuffer());
+    const hdr = await readSpzHeader(spz);
+    lastGlb = buildGlb(spz, hdr);
+    const glbUrl = URL.createObjectURL(new Blob([lastGlb], { type: 'model/gltf-binary' }));
+    lastTileset = buildTileset(hdr, 'content.glb');
+    const tsUrl = URL.createObjectURL(new Blob([JSON.stringify(buildTileset(hdr, glbUrl))], { type: 'application/json' }));
+    if (tileset){ viewer.scene.primitives.remove(tileset); tileset = null; }
+    tileset = await Cesium.Cesium3DTileset.fromUrl(tsUrl);
+    tileset.modelMatrix = placement();
+    viewer.scene.primitives.add(tileset);
+    status.textContent = `${file.name}　SPZ v${hdr.version}　${hdr.n.toLocaleString()} splats　SH次数 ${hdr.shDegree}`;
+    flyTo();
+  }catch(e){
+    console.error(e);
+    status.textContent = `失敗：${e.message ?? e}`;
+  }
+}
+function flyTo(){
+  if (orbiting) $('orbit').click();
+  const c = Cesium.Cartesian3.fromDegrees(+$('lng').value, +$('lat').value, +$('h').value);
+  viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(c, 8), {
+    offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-35), 25), duration: 1.2 });
+}
+
+/* ---------- UI ---------- */
+['lat','lng','h','pitch','roll','scale'].forEach(id => $(id).addEventListener('input', apply));
+$('heading').addEventListener('input', () => { $('headingN').value = $('heading').value; apply(); });
+$('headingN').addEventListener('input', () => { $('heading').value = $('headingN').value; apply(); });
+$('fly').onclick = flyTo;
+$('toPin').onclick = () => { $('lat').value = PIN.lat; $('lng').value = PIN.lng; apply(); flyTo(); };
+$('osm').addEventListener('input', () => {
+  const a = +$('osm').value;
+  osmLayer.alpha = a; osmLayer.show = a > 0;   // 0のときはタイル取得もしない
+});
+
+// Splatの位置を中心にしたENU座標系にカメラを固定すると、左ドラッグがその点の周回になる
+let orbiting = false;
+$('orbit').onclick = () => {
+  orbiting = !orbiting;
+  $('orbit').classList.toggle('on', orbiting);
+  if (orbiting){
+    const c = Cesium.Cartesian3.fromDegrees(+$('lng').value, +$('lat').value, +$('h').value);
+    viewer.camera.lookAtTransform(Cesium.Transforms.eastNorthUpToFixedFrame(c),
+      new Cesium.HeadingPitchRange(viewer.camera.heading, Math.min(viewer.camera.pitch, -0.2), 30));
+  } else {
+    viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+  }
+};
+$('file').onchange = e => e.target.files[0] && load(e.target.files[0]);
+
+const view = $('view'), drop = $('drop');
+view.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('on'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('on'));
+drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('on'); const f = e.dataTransfer.files[0]; if (f) load(f); });
+
+let picking = false;
+$('pick').onclick = () => { picking = !picking; $('pick').classList.toggle('on', picking); };
+new Cesium.ScreenSpaceEventHandler(viewer.canvas).setInputAction(ev => {
+  if (!picking) return;
+  if (orbiting) $('orbit').click();
+  const p = viewer.camera.pickEllipsoid(ev.position);
+  if (!p) return;
+  const c = Cesium.Cartographic.fromCartesian(p);
+  $('lat').value = Cesium.Math.toDegrees(c.latitude).toFixed(6);
+  $('lng').value = Cesium.Math.toDegrees(c.longitude).toFixed(6);
+  picking = false; $('pick').classList.remove('on');
+  apply();
+}, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+function download(name, data, type){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([data], { type })); a.download = name; a.click();
+}
+$('export').onclick = () => {
+  if (!lastGlb) return;
+  download('tileset.json', JSON.stringify(lastTileset, null, 2), 'application/json');
+  setTimeout(() => download('content.glb', lastGlb, 'model/gltf-binary'), 300);
+};
+
+placement();
+viewer.camera.setView({ destination: Cesium.Cartesian3.fromDegrees(+$('lng').value, +$('lat').value - 0.0012, 180),
+  orientation: { heading: 0, pitch: Cesium.Math.toRadians(-50), roll: 0 } });
+</script>
+</body>
+</html>
