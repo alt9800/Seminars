@@ -43,15 +43,23 @@
 <div class="app">
   <div id="view">
     <div id="cesium"></div>
-    <div class="status" id="status">.spz をドロップしてください</div>
+    <div class="status" id="status">置きたい場所を表示してから、.spz をドロップしてください</div>
     <div class="drop" id="drop">ここにドロップ</div>
   </div>
   <div class="panel">
     <h1>Splat を地図に置く</h1>
     <label class="file">.spz を選ぶ<input type="file" id="file" accept=".spz"></label>
-    <button id="pick">地図クリックで位置指定</button>
     <button id="fly">Splatへ移動</button>
-    <button id="toPin">ピンに合わせる</button>
+    <button id="shot">スクリーンショット保存</button>
+
+    <h2>場所を探す</h2>
+    <div class="f">
+      <span>住所・地名</span><input type="search" id="q" placeholder="例：城崎温泉 一の湯">
+    </div>
+    <button id="search">検索</button>
+    <button id="here">現在地</button>
+    <button id="tap" class="on">タップで置く：ON</button>
+    <p class="note">SPZファイル自体には位置情報が入っていません。読み込むと、いま画面の中央に見えている場所に置かれます。先に場所を探してから読み込むか、読み込んだ後に地図をタップして置き直してください。住所検索は国土地理院の住所検索APIを使っています。</p>
 
     <h2>背景地図</h2>
     <div class="f">
@@ -61,12 +69,12 @@
 
     <h2>カメラ</h2>
     <button id="orbit">Splat中心で回す</button>
-    <p class="note">通常時：左ドラッグで移動、右ドラッグかホイールで拡大縮小、Ctrl＋左ドラッグ（または中ボタンドラッグ）で回転・傾き。「Splat中心で回す」中は左ドラッグでSplatの周りを回ります。</p>
+    <p class="note">通常時：左ドラッグで移動、右ドラッグかホイールで拡大縮小、Ctrl＋左ドラッグ（または中ボタンドラッグ）で回転・傾き。「Splat中心で回す」中は左ドラッグでSplatの周りを回ります（タップで置く操作は止まります）。</p>
 
     <h2>位置</h2>
     <div class="f">
-      <span>緯度</span><input type="number" id="lat" step="0.000001" value="35.626143">
-      <span>経度</span><input type="number" id="lng" step="0.000001" value="134.809752">
+      <span>緯度</span><input type="number" id="lat" step="0.000001" value="">
+      <span>経度</span><input type="number" id="lng" step="0.000001" value="">
       <span>高さ(m)</span><input type="number" id="h" step="0.1" value="0">
     </div>
     <p class="note">地形を読み込んでいないため、地面は楕円体面（高さ0）です。実地形の上に置く場合は「標高＋ジオイド高」を入れます。</p>
@@ -203,18 +211,17 @@ const osmLayer = viewer.imageryLayers.addImageryProvider(new Cesium.UrlTemplateI
 }));
 osmLayer.alpha = 0; osmLayer.show = false;
 
-// キャリブレーション用の基準ピン（サンプルの中心座標）
-const PIN = { lat: 35.626143, lng: 134.809752 };
-viewer.entities.add({
-  position: Cesium.Cartesian3.fromDegrees(PIN.lng, PIN.lat, 0),
+// Splatを置く位置を示すピン（タップ・検索・現在地で動く）
+const pin = viewer.entities.add({
+  show: false,
+  position: Cesium.Cartesian3.fromDegrees(0, 0, 0),
   billboard: {
     image: new Cesium.PinBuilder().fromColor(Cesium.Color.fromCssColorString('#b8432f'), 40).toDataURL(),
     verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
     disableDepthTestDistance: Number.POSITIVE_INFINITY,   // Splatに隠れないよう常に手前に描く
   },
   label: {
-    text: `基準 ${PIN.lat}, ${PIN.lng}`,
-    font: '12px sans-serif', fillColor: Cesium.Color.WHITE,
+    text: '', font: '12px sans-serif', fillColor: Cesium.Color.WHITE,
     outlineColor: Cesium.Color.BLACK, outlineWidth: 3, style: Cesium.LabelStyle.FILL_AND_OUTLINE,
     pixelOffset: new Cesium.Cartesian2(0, -46), verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
     disableDepthTestDistance: Number.POSITIVE_INFINITY,
@@ -225,8 +232,25 @@ const $ = id => document.getElementById(id);
 const status = $('status');
 let tileset = null, lastGlb = null, lastTileset = null;
 
+function hasPos(){ return $('lat').value !== '' && $('lng').value !== ''; }
+function setPos(lat, lng){
+  $('lat').value = lat.toFixed(6); $('lng').value = lng.toFixed(6);
+  apply();
+}
+// 画面中央の地表の緯度経度（取れなければ null）
+function viewCenter(){
+  const c = viewer.canvas, p = viewer.camera.pickEllipsoid(new Cesium.Cartesian2(c.clientWidth / 2, c.clientHeight / 2));
+  if (!p) return null;
+  const g = Cesium.Cartographic.fromCartesian(p);
+  return { lat: Cesium.Math.toDegrees(g.latitude), lng: Cesium.Math.toDegrees(g.longitude) };
+}
 function placement(){
   const lat = +$('lat').value, lng = +$('lng').value, h = +$('h').value;
+  if (hasPos()){
+    pin.show = true;
+    pin.position = Cesium.Cartesian3.fromDegrees(lng, lat, h);
+    pin.label.text = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+  }
   const hpr = new Cesium.HeadingPitchRoll(
     Cesium.Math.toRadians(+$('headingN').value),
     Cesium.Math.toRadians(+$('pitch').value),
@@ -250,6 +274,11 @@ async function load(file){
     lastTileset = buildTileset(hdr, 'content.glb');
     const tsUrl = URL.createObjectURL(new Blob([JSON.stringify(buildTileset(hdr, glbUrl))], { type: 'application/json' }));
     if (tileset){ viewer.scene.primitives.remove(tileset); tileset = null; }
+    if (!hasPos()){
+      const c = viewCenter();
+      if (c) setPos(c.lat, c.lng);
+      else { status.textContent = '画面に地面が映る状態で読み込み直してください'; return; }
+    }
     tileset = await Cesium.Cesium3DTileset.fromUrl(tsUrl);
     tileset.modelMatrix = placement();
     viewer.scene.primitives.add(tileset);
@@ -261,6 +290,7 @@ async function load(file){
   }
 }
 function flyTo(){
+  if (!hasPos()) return;
   if (orbiting) $('orbit').click();
   const c = Cesium.Cartesian3.fromDegrees(+$('lng').value, +$('lat').value, +$('h').value);
   viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(c, 8), {
@@ -272,7 +302,44 @@ function flyTo(){
 $('heading').addEventListener('input', () => { $('headingN').value = $('heading').value; apply(); });
 $('headingN').addEventListener('input', () => { $('heading').value = $('headingN').value; apply(); });
 $('fly').onclick = flyTo;
-$('toPin').onclick = () => { $('lat').value = PIN.lat; $('lng').value = PIN.lng; apply(); flyTo(); };
+
+// 住所検索（国土地理院 住所検索API）
+async function search(){
+  const q = $('q').value.trim(); if (!q) return;
+  status.textContent = `検索中：${q}`;
+  try{
+    const r = await fetch('https://msearch.gsi.go.jp/address-search/AddressSearch?q=' + encodeURIComponent(q));
+    const js = await r.json();
+    if (!js.length){ status.textContent = `見つかりませんでした：${q}`; return; }
+    const [lng, lat] = js[0].geometry.coordinates;
+    setPos(lat, lng); flyTo();
+    status.textContent = `${js[0].properties.title}　位置がずれていれば地図をタップして置き直してください`;
+  }catch(e){ console.error(e); status.textContent = '検索に失敗しました'; }
+}
+$('search').onclick = search;
+$('q').addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
+
+// 現在地（https か localhost で開いたときのみ使える）
+$('here').onclick = () => {
+  if (!navigator.geolocation){ status.textContent = 'このブラウザでは現在地を取得できません'; return; }
+  status.textContent = '現在地を取得中…';
+  navigator.geolocation.getCurrentPosition(
+    p => { setPos(p.coords.latitude, p.coords.longitude); flyTo(); status.textContent = `現在地（精度 約${Math.round(p.coords.accuracy)} m）`; },
+    e => { status.textContent = `現在地を取得できませんでした（${e.message}）`; },
+    { enableHighAccuracy: true, timeout: 10000 });
+};
+
+// スクリーンショット（描画直後のフレームを保存）
+$('shot').onclick = () => {
+  const remove = viewer.scene.postRender.addEventListener(() => {
+    remove();
+    const a = document.createElement('a');
+    a.href = viewer.canvas.toDataURL('image/png');
+    a.download = `splat-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'')}.png`;
+    a.click();
+  });
+  viewer.scene.requestRender();
+};
 $('osm').addEventListener('input', () => {
   const a = +$('osm').value;
   osmLayer.alpha = a; osmLayer.show = a > 0;   // 0のときはタイル取得もしない
@@ -298,18 +365,19 @@ view.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add(
 drop.addEventListener('dragleave', () => drop.classList.remove('on'));
 drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('on'); const f = e.dataTransfer.files[0]; if (f) load(f); });
 
-let picking = false;
-$('pick').onclick = () => { picking = !picking; $('pick').classList.toggle('on', picking); };
+let tapToPlace = true;
+$('tap').onclick = () => {
+  tapToPlace = !tapToPlace;
+  $('tap').classList.toggle('on', tapToPlace);
+  $('tap').textContent = `タップで置く：${tapToPlace ? 'ON' : 'OFF'}`;
+};
+// ドラッグではなくタップ（クリック）したときだけ発火する
 new Cesium.ScreenSpaceEventHandler(viewer.canvas).setInputAction(ev => {
-  if (!picking) return;
-  if (orbiting) $('orbit').click();
+  if (!tapToPlace || orbiting) return;
   const p = viewer.camera.pickEllipsoid(ev.position);
   if (!p) return;
   const c = Cesium.Cartographic.fromCartesian(p);
-  $('lat').value = Cesium.Math.toDegrees(c.latitude).toFixed(6);
-  $('lng').value = Cesium.Math.toDegrees(c.longitude).toFixed(6);
-  picking = false; $('pick').classList.remove('on');
-  apply();
+  setPos(Cesium.Math.toDegrees(c.latitude), Cesium.Math.toDegrees(c.longitude));
 }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
 function download(name, data, type){
@@ -323,8 +391,7 @@ $('export').onclick = () => {
 };
 
 placement();
-viewer.camera.setView({ destination: Cesium.Cartesian3.fromDegrees(+$('lng').value, +$('lat').value - 0.0012, 180),
-  orientation: { heading: 0, pitch: Cesium.Math.toRadians(-50), roll: 0 } });
+viewer.camera.setView({ destination: Cesium.Cartesian3.fromDegrees(137.5, 36.0, 2500000) });
 </script>
 </body>
 </html>
