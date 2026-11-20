@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>三章 DEMに水を貯め、ボールを転がす（Navara）</title>
+<style>
+  :root { --ink: #222; --sub: #666; --line: #d8d5cc; --accent: #2f5d8a; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; color: var(--ink); background: #e9ecef;
+    font-family: "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif; }
+  #view { position: absolute; inset: 0; }
+  #panel {
+    position: absolute; top: 12px; left: 12px; z-index: 10;
+    width: 320px; max-height: calc(100% - 24px); overflow-y: auto;
+    background: rgba(255,255,255,.95); border: 1px solid var(--line);
+    padding: 14px 16px; font-size: 14px; line-height: 1.6;
+  }
+  #panel h1 { font-size: 15px; margin: 0 0 8px; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+  .tabs button { flex: 1; padding: 6px 0; border: 1px solid var(--line); background: #fff; font: inherit; cursor: pointer; }
+  .tabs button[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .step { display: none; } .step.active { display: block; }
+  .step p { margin: 0 0 8px; color: var(--sub); }
+  label { display: block; margin: 8px 0 2px; }
+  input[type="range"], select { width: 100%; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .row button { padding: 4px 10px; border: 1px solid var(--line); background: #fff; font: inherit; cursor: pointer; }
+  #status { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 13px; color: var(--sub); white-space: pre-line; }
+  @media (max-width: 640px) {
+    #panel { top: auto; bottom: 0; left: 0; width: 100%; max-height: 45%; border-left: 0; border-right: 0; border-bottom: 0; }
+  }
+</style>
+
+<!-- 依存ライブラリをCDNから読む。バージョンは固定しておく -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
+    "postprocessing": "https://cdn.jsdelivr.net/npm/postprocessing@6.39.6/build/index.js",
+    "@navaramap/three": "https://cdn.jsdelivr.net/npm/@navaramap/three@0.3.1/dist/index.js",
+    "@navaramap/three-default-plugin": "https://cdn.jsdelivr.net/npm/@navaramap/three-default-plugin@0.3.1/dist/index.js",
+    "@navaramap/three-default-descs": "https://cdn.jsdelivr.net/npm/@navaramap/three-default-descs@0.3.1/dist/index.js",
+    "@navaramap/engine": "https://cdn.jsdelivr.net/npm/@navaramap/engine@0.3.1/navara_wasm.js",
+    "@navaramap/engine-api": "https://cdn.jsdelivr.net/npm/@navaramap/engine-api@0.3.1/navara_wasm_api.js",
+    "@navaramap/engine-worker": "https://cdn.jsdelivr.net/npm/@navaramap/engine-worker@0.3.1/navara_wasm_worker.js",
+    "@navaramap/engine-font-worker": "https://cdn.jsdelivr.net/npm/@navaramap/engine-font-worker@0.3.1/navara_wasm_font_worker.js",
+    "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+  }
+}
+</script>
+
+<!--
+  CDNから読むときの工夫：
+  Web Worker は「ページと同じオリジン」のURLからしか起動できない。
+  そこで、CDN上のWorkerスクリプトを読み込む小さなWorkerをページ内で作る。
+  Worker内でWASMの場所を探すときの基準URLもCDN側に向け直す。
+  （ビルドツールを使う通常の構成なら、この処理は不要）
+-->
+<script>
+(() => {
+  const NativeWorker = window.Worker;
+  window.Worker = function (url, options) {
+    const href = new URL(String(url), location.href).href;
+    if (new URL(href).origin === location.origin) return new NativeWorker(url, options);
+    const prelude =
+      `const __BASE__ = ${JSON.stringify(href)};\n` +
+      `const __URL__ = self.URL;\n` +
+      `self.URL = class extends __URL__ { constructor(u, b) {\n` +
+      `  if (typeof b === "string" && b.startsWith("blob:")) b = __BASE__;\n` +
+      `  super(u, b); } };\n` +
+      (options && options.type === 'module'
+        ? `await import(__BASE__);\n`
+        : `importScripts(__BASE__);\n`);
+    const blob = new Blob([prelude], { type: 'text/javascript' });
+    return new NativeWorker(URL.createObjectURL(blob), options);
+  };
+  window.Worker.prototype = NativeWorker.prototype;
+})();
+</script>
+</head>
+<body>
+<div id="view"></div>
+
+<div id="panel">
+  <h1>三章 DEMに水を貯め、ボールを転がす</h1>
+  <div class="tabs" role="group">
+    <button data-step="4" aria-pressed="true">4 水を貯める</button>
+    <button data-step="5" aria-pressed="false">5 ボールと雪</button>
+  </div>
+
+  <section class="step active" data-step="4">
+    <p>地面をクリックすると、その地点の標高＋水深を水面の高さとして、つながっている低い場所に水を広げます。</p>
+    <label for="rng-depth">水深：<span id="val-depth">30</span> m</label>
+    <input type="range" id="rng-depth" min="5" max="150" step="5" value="30">
+    <div class="row">
+      <button id="btn-crater">山頂の火口に貯める</button>
+      <button id="btn-water-clear">水を消す</button>
+    </div>
+  </section>
+
+  <section class="step" data-step="5">
+    <p>地面をクリックすると、その上空からボールを落とします。転がる計算はJavaScript（cannon-es）がCPUで行います。</p>
+    <label for="rng-radius">ボールの半径：<span id="val-radius">8</span> m</label>
+    <input type="range" id="rng-radius" min="1" max="20" step="1" value="8">
+    <div class="row">
+      <button id="btn-drop">山頂から10個</button>
+      <button id="btn-reset">消す</button>
+    </div>
+    <label><input type="checkbox" id="chk-snow"> シェーダーで雪を降らせる（GPUで計算）</label>
+  </section>
+
+  <label for="sel-base">背景地図</label>
+  <select id="sel-base">
+    <option value="std" selected>地理院 標準地図</option>
+    <option value="pale">地理院 淡色地図</option>
+    <option value="photo">地理院 写真</option>
+    <option value="osm">OpenStreetMap</option>
+  </select>
+  <div id="status">読み込み中…</div>
+</div>
+
+<script type="module">
+import ThreeView, { Color, geodeticToVector3, vector3ToGeodetic, eastNorthUpToFixedFrame, JAPAN_GSI_ELEVATION_DECODER } from '@navaramap/three';
+import { DefaultPlugin } from '@navaramap/three-default-plugin';
+import { Matrix4, Color as ThreeColor } from 'three';
+import * as CANNON from 'cannon-es';
+
+const statusEl = document.getElementById('status');
+const setStatus = (t) => { statusEl.textContent = t; };
+
+// ============================================================
+// 1. Navara の初期化と地形
+// ============================================================
+const view = new ThreeView({ container: document.getElementById('view'), shadow: true });
+const plugin = new DefaultPlugin();
+view.addPlugin(plugin);          // プラグインは init の前に追加する
+await view.init();               // WASM と Worker の準備
+plugin.addDefaultPhotorealScene();
+view.atmosphere.date = new Date('2026-11-13T01:00:00Z');   // 日本時間の10時
+
+// 地理院の標高タイル（PNG）を地形として読む
+const dem = view.addSource({
+  type: 'raster-dem',
+  url: 'https://cyberjapandata.gsi.go.jp/xyz/dem_png/{z}/{x}/{y}.png',
+  maxZoom: 14,
+  elevationDecoder: JAPAN_GSI_ELEVATION_DECODER()
+});
+view.addLayer({ type: 'terrain', source: dem });  // 地形は画像より先に追加する
+
+// 背景地図：切り替えられるようにしておく
+const BASEMAPS = {
+  std:   { url: 'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', maxZoom: 18,
+           credit: { attribution: '地理院タイル（標準地図）', attributionUrl: 'https://maps.gsi.go.jp/development/ichiran.html' } },
+  pale:  { url: 'https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', maxZoom: 18,
+           credit: { attribution: '地理院タイル（淡色地図）', attributionUrl: 'https://maps.gsi.go.jp/development/ichiran.html' } },
+  photo: { url: 'https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', maxZoom: 18,
+           credit: { attribution: '地理院タイル（全国最新写真）', attributionUrl: 'https://maps.gsi.go.jp/development/ichiran.html' } },
+  osm:   { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', maxZoom: 19,
+           credit: { attribution: '© OpenStreetMap contributors', attributionUrl: 'https://www.openstreetmap.org/copyright' } }
+};
+const DEM_CREDIT = { attribution: '地理院タイル（標高タイル）', attributionUrl: 'https://maps.gsi.go.jp/development/ichiran.html' };
+view.attribution?.add([DEM_CREDIT]);
+
+let base = null;   // { source, layer, credit }
+function setBasemap(key) {
+  const b = BASEMAPS[key];
+  if (base) { base.layer.delete(); base.source.delete(); view.attribution?.remove([base.credit]); }
+  const source = view.addSource({ type: 'raster-tile', url: b.url, maxZoom: b.maxZoom });
+  const layer = view.addLayer({ type: 'raster', source });   // 地形の後に追加するので、地形に貼り付く
+  view.attribution?.add([b.credit]);
+  base = { source, layer, credit: b.credit };
+}
+setBasemap('std');
+
+const FUJI = { lat: 35.3606, lng: 138.7274 };
+view.setCamera({ lat: 35.322, lng: 138.7274, height: 6500, heading: 0, pitch: -25, roll: 0 });
+
+// ============================================================
+// 2. 共通：ある地点の周りの標高を格子状に取り出す
+//    東西・南北のメートルを緯度経度に換算する（数km四方なら平面とみなせる）
+// ============================================================
+const M_PER_DEG_LAT = 111320;
+const mPerDegLng = (lat) => 111320 * Math.cos(lat * Math.PI / 180);
+
+async function sampleGrid(center, sizeM, n) {
+  const half = sizeM / 2, step = sizeM / n;
+  const positions = [];
+  for (let i = 0; i <= n; i++) {          // i：西→東
+    for (let j = 0; j <= n; j++) {        // j：北→南
+      const east = -half + i * step, north = half - j * step;
+      positions.push({ lat: center.lat + north / M_PER_DEG_LAT, lng: center.lng + east / mPerDegLng(center.lat) });
+    }
+  }
+  // 最も詳しいズームの標高タイルを取りにいって高さを返す
+  const result = await view.sampleTerrainMostDetailed(dem, positions);
+  const h = [];
+  for (let i = 0; i <= n; i++) {
+    h[i] = [];
+    for (let j = 0; j <= n; j++) h[i][j] = result[i * (n + 1) + j]?.height ?? 0;
+  }
+  return { center, sizeM, n, step, half, h };
+}
+
+// 格子の (i, j) を緯度経度に
+function gridToLatLng(g, i, j) {
+  const east = -g.half + i * g.step, north = g.half - j * g.step;
+  return { lat: g.center.lat + north / M_PER_DEG_LAT, lng: g.center.lng + east / mPerDegLng(g.center.lat) };
+}
+
+// ============================================================
+// 4. 水を貯める：クリック地点から「水面より低く、つながっている格子」を探す
+//    （塗りつぶし＝幅優先探索。画像編集ソフトの「バケツ」と同じ考え方）
+// ============================================================
+let waterHandle = null;
+
+async function fillWater(seed, depth) {
+  setStatus('周辺の標高を取得中…');
+  const g = await sampleGrid(seed, 3000, 100);          // 3km四方を30m格子で
+  const c = g.n / 2;
+  const level = g.h[c][c] + depth;                       // 水面の高さ
+
+  const wet = new Set([`${c},${c}`]);
+  const queue = [[c, c]];
+  let overflow = false;
+  while (queue.length) {
+    const [i, j] = queue.shift();
+    for (const [di, dj] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+      const a = i + di, b = j + dj;
+      if (a < 0 || b < 0 || a > g.n || b > g.n) { overflow = true; continue; }
+      const key = `${a},${b}`;
+      if (wet.has(key) || g.h[a][b] >= level) continue;
+      wet.add(key);
+      queue.push([a, b]);
+    }
+  }
+
+  // 水のある格子ごとに、地面から水面までの箱を置く（インスタンス描画で1回にまとめる）
+  const children = [];
+  for (const key of wet) {
+    const [i, j] = key.split(',').map(Number);
+    const ground = g.h[i][j], d = Math.max(level - ground, 0.5);
+    const p = gridToLatLng(g, i, j);
+    const center = geodeticToVector3({ lat: p.lat, lng: p.lng, height: ground + d / 2 });
+    const m = eastNorthUpToFixedFrame(center).multiply(new Matrix4().makeScale(g.step, g.step, d));
+    children.push({ matrix: m });
+  }
+  waterHandle?.delete();
+  waterHandle = view.addMesh({
+    boxes: { color: new Color().setStyle('#3b82c4'), opacity: 0.75, transparent: true, children }
+  });
+  setStatus(
+    `水面の高さ：${level.toFixed(0)} m（クリック地点 ${g.h[c][c].toFixed(0)} m＋${depth} m）\n` +
+    `水が届いた格子：${wet.size} 個（1格子 ${g.step} m 四方）` +
+    (overflow ? '\n範囲の端まで届きました。実際にはさらに下流へ流れていきます。' : '')
+  );
+}
+
+// ============================================================
+// 5. ボールを落とす：標高の格子を物理エンジンの「地面」にする
+// ============================================================
+const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
+world.broadphase = new CANNON.SAPBroadphase(world);
+const groundMat = new CANNON.Material('ground'), ballMat = new CANNON.Material('ball');
+world.addContactMaterial(new CANNON.ContactMaterial(groundMat, ballMat, { friction: 0.3, restitution: 0.15 }));
+world.addContactMaterial(new CANNON.ContactMaterial(ballMat, ballMat, { friction: 0.3, restitution: 0.5 }));
+
+// 物理の座標：x＝東、y＝上（標高）、z＝北。原点は山頂の真下
+setStatus('物理計算用に地形を取得中…');
+const field = await sampleGrid(FUJI, 8000, 120);        // 8km四方を約67m格子で
+{
+  const shape = new CANNON.Heightfield(field.h, { elementSize: field.step });
+  const body = new CANNON.Body({ mass: 0, material: groundMat });
+  body.addShape(shape);
+  // Heightfield は「xy平面に高さz」で作られるので、x軸まわりに回してyを上に向ける
+  body.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+  body.position.set(-field.half, 0, field.half);
+  world.addBody(body);
+}
+
+function physicsToEcef(p) {
+  return geodeticToVector3({
+    lat: FUJI.lat + p.z / M_PER_DEG_LAT,
+    lng: FUJI.lng + p.x / mPerDegLng(FUJI.lat),
+    height: p.y
+  });
+}
+
+// 標高で色を変える（低い＝青、高い＝赤）
+function heightColor(h) {
+  const t = Math.min(Math.max((h - 800) / (3776 - 800), 0), 1);
+  const c = new ThreeColor().setHSL((1 - t) * 240 / 360, 0.9, 0.5);
+  return new Color().setStyle('#' + c.getHexString());
+}
+
+const balls = [];
+const MAX_BALLS = 300;
+
+function dropBall(east, north, radius) {
+  if (balls.length >= MAX_BALLS) return;
+  const i = Math.round((east + field.half) / field.step), j = Math.round((field.half - north) / field.step);
+  const groundH = field.h[i]?.[j] ?? 3776;
+  const body = new CANNON.Body({
+    mass: 50, shape: new CANNON.Sphere(radius), material: ballMat,
+    linearDamping: 0.02, angularDamping: 0.1
+  });
+  body.position.set(east + (Math.random() - 0.5) * 60, groundH + 80 + Math.random() * 30, north + (Math.random() - 0.5) * 60);
+  world.addBody(body);
+  const pos = physicsToEcef(body.position);
+  const handle = view.addMesh({
+    sphere: { radius, widthSegments: 12, heightSegments: 12, color: heightColor(body.position.y), castShadow: true },
+    position: { x: pos.x, y: pos.y, z: pos.z }
+  });
+  balls.push({ body, handle, colorStep: Math.round(body.position.y / 50) });
+}
+
+function clearBalls() {
+  for (const b of balls) { world.removeBody(b.body); b.handle.delete(); }
+  balls.length = 0;
+}
+
+let last = performance.now(), frame = 0;
+function loop(now) {
+  const dt = Math.min((now - last) / 1000, 0.1);
+  last = now; frame++;
+  world.step(1 / 60, dt, 3);
+  for (let k = balls.length - 1; k >= 0; k--) {
+    const b = balls[k], p = b.body.position;
+    if (Math.abs(p.x) > field.half || Math.abs(p.z) > field.half || p.y < -100) {   // 範囲外は消す
+      world.removeBody(b.body); b.handle.delete(); balls.splice(k, 1); continue;
+    }
+    const e = physicsToEcef(p);
+    const update = { position: { x: e.x, y: e.y, z: e.z } };
+    const step = Math.round(p.y / 50);            // 色は50m刻みで変わったときだけ更新
+    if (frame % 10 === 0 && step !== b.colorStep) { b.colorStep = step; update.sphere = { color: heightColor(p.y) }; }
+    b.handle.update(update);
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// 雪：粒の位置はGPU（シェーダー）が毎フレーム計算する
+let snowHandle = null;
+function setSnow(on) {
+  snowHandle?.delete(); snowHandle = null;
+  if (on) snowHandle = view.addMesh({
+    // 粒はカメラの周り（半径 areaWidth × radius m）に置かれ、カメラと一緒に動く。
+    // speed は既定値（0.00005）のまま。大きくすると毎フレーム位置が飛び、見えなくなる
+    snow: { particleCount: 60000, areaWidth: 100, radius: 10, areaHeight: 1500, size: 4,
+            followCamera: true, maxHeight: 30000 }   // maxHeight：カメラがこの高さに近づくほど薄くなる
+  });
+}
+
+// ============================================================
+// 操作
+// ============================================================
+let step = '4';
+let radius = 8, depth = 30;
+
+view.on('click', (ev) => {
+  const ecef = view.pickTerrainPosition(ev.clientX, ev.clientY);
+  if (!ecef) return;
+  const p = vector3ToGeodetic(ecef);
+  if (step === '4') {
+    fillWater({ lat: p.lat, lng: p.lng }, depth);
+  } else {
+    const east = (p.lng - FUJI.lng) * mPerDegLng(FUJI.lat), north = (p.lat - FUJI.lat) * M_PER_DEG_LAT;
+    if (Math.abs(east) > field.half || Math.abs(north) > field.half) { setStatus('ボールは山頂から4km以内に落とせます'); return; }
+    for (let k = 0; k < 10; k++) dropBall(east, north, radius);
+  }
+});
+
+document.getElementById('rng-depth').oninput = (e) => { depth = Number(e.target.value); document.getElementById('val-depth').textContent = depth; };
+document.getElementById('btn-crater').onclick = () => fillWater(FUJI, depth);
+document.getElementById('btn-water-clear').onclick = () => { waterHandle?.delete(); waterHandle = null; setStatus('水を消しました'); };
+
+document.getElementById('rng-radius').oninput = (e) => { radius = Number(e.target.value); document.getElementById('val-radius').textContent = radius; };
+document.getElementById('btn-drop').onclick = () => { for (let k = 0; k < 10; k++) dropBall(0, 0, radius); };
+document.getElementById('btn-reset').onclick = clearBalls;
+document.getElementById('sel-base').onchange = (e) => setBasemap(e.target.value);
+document.getElementById('chk-snow').onchange = (e) => setSnow(e.target.checked);
+
+document.querySelectorAll('.tabs button').forEach(btn => btn.onclick = () => {
+  step = btn.dataset.step;
+  document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
+  document.querySelectorAll('.step').forEach(s => s.classList.toggle('active', s.dataset.step === step));
+});
+
+setInterval(() => {
+  if (step === '5') setStatus(`ボール：${balls.length} 個（上限 ${MAX_BALLS}）`);
+}, 500);
+setStatus(`準備完了。地形の標高範囲：${Math.min(...field.h.flat()).toFixed(0)}〜${Math.max(...field.h.flat()).toFixed(0)} m`);
+</script>
+</body>
+</html>

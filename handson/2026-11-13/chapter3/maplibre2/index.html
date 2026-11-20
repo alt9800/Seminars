@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>三章ハンズオン STEP2</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<!-- STEP1：PMTiles（1ファイルにタイルを詰めた形式）を読むライブラリ -->
+<script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; font-family: "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif; }
+  #map { position: absolute; inset: 0; }
+  /* STEP2：操作パネル（狭い画面では下に置く） */
+  #panel { position: absolute; top: 12px; left: 12px; z-index: 1; width: 260px;
+    background: rgba(255,255,255,.95); border: 1px solid #d8d5cc; padding: 12px 14px; font-size: 14px; line-height: 1.6; }
+  #panel label { display: block; margin-top: 6px; }
+  #panel input[type="range"] { width: 100%; }
+  @media (max-width: 640px) { #panel { top: auto; bottom: 0; left: 0; width: 100%; } }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="panel">
+  <label><input type="checkbox" id="chk-relief" checked> 標高で色を付ける</label>
+  <label for="rng-exag">高さの強調：<span id="val-exag">1.5</span> 倍</label>
+  <input type="range" id="rng-exag" min="1" max="5" step="0.5" value="1.5">
+</div>
+<script>
+// ============================================================
+// STEP0：地図を表示する（背景は地理院タイルの淡色地図）
+// ============================================================
+const map = new maplibregl.Map({
+  container: 'map',
+  center: [138.7274, 35.3606],   // 富士山
+  zoom: 11,
+  pitch: 60,                     // STEP1：斜めから見る
+  maxPitch: 85,
+  hash: true,
+  style: {
+    version: 8,
+    sources: {
+      pale: {
+        type: 'raster',
+        tiles: ['https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png'],
+        tileSize: 256, maxzoom: 18,
+        attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">地理院タイル</a>'
+      }
+    },
+    layers: [{ id: 'pale', type: 'raster', source: 'pale' }]
+  }
+});
+map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+
+// ============================================================
+// STEP1：Mapterhorn の標高タイルを読めるようにする
+//   z12以下は全球のファイル、z13以上は地域ごとのファイルを読む（公式例と同じ規則）
+// ============================================================
+const MAPTERHORN = 'https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/mapterhorn/mapterhorn/';
+const pmFiles = new Map();
+
+async function getMapterhornTile(url, signal) {
+  const [z, x, y] = url.replace('mapterhorn://', '').split('/').map(Number);
+  const name = z <= 12 ? 'planet' : `6-${x >> (z - 6)}-${y >> (z - 6)}`;
+  if (!pmFiles.has(name)) pmFiles.set(name, new pmtiles.PMTiles(`${MAPTERHORN}${name}.pmtiles`));
+  const tile = await pmFiles.get(name).getZxy(z, x, y, signal);
+  return tile ? tile.data : null;
+}
+
+// 「mapterhorn://z/x/y」というURLを MapLibre が読めるようにする
+maplibregl.addProtocol('mapterhorn', async (params, abortController) => {
+  const data = await getMapterhornTile(params.url, abortController.signal);
+  if (!data) throw new Error('tile not found');
+  return { data };
+});
+
+map.on('load', () => {
+  // --- STEP1：陰影図と2.5D ---------------------------------
+  const ATTR = '<a href="https://mapterhorn.com/attribution" target="_blank">© Mapterhorn</a>';
+  // 陰影・色付け用と、地形の持ち上げ用は別のソースにする（MapLibreの推奨）
+  map.addSource('dem', { type: 'raster-dem', tiles: ['mapterhorn://{z}/{x}/{y}'], encoding: 'terrarium', tileSize: 512, attribution: ATTR });
+  map.addSource('terrainSrc', { type: 'raster-dem', tiles: ['mapterhorn://{z}/{x}/{y}'], encoding: 'terrarium', tileSize: 512 });
+
+  map.addLayer({ id: 'hillshade', type: 'hillshade', source: 'dem',
+    paint: { 'hillshade-exaggeration': 0.6, 'hillshade-shadow-color': '#3a3a3a' } });
+
+  map.setTerrain({ source: 'terrainSrc', exaggeration: 1.5 });
+
+  // --- STEP2：標高で色を付ける（陰影の下に入れる） -----------
+  map.addLayer({ id: 'relief', type: 'color-relief', source: 'dem',
+    paint: {
+      'color-relief-color': ['interpolate', ['linear'], ['elevation'],
+        0, '#2c4f9e', 500, '#4fa3c7', 1500, '#f2e7a0', 2500, '#e0703a', 3776, '#a3172a'],
+      'color-relief-opacity': 0.75
+    } }, 'hillshade');
+
+  document.getElementById('chk-relief').onchange = (e) =>
+    map.setLayoutProperty('relief', 'visibility', e.target.checked ? 'visible' : 'none');
+
+  document.getElementById('rng-exag').oninput = (e) => {
+    const v = Number(e.target.value);
+    document.getElementById('val-exag').textContent = v;
+    map.setTerrain({ source: 'terrainSrc', exaggeration: v });   // 見た目だけの倍率
+  };
+
+});
+</script>
+</body>
+</html>

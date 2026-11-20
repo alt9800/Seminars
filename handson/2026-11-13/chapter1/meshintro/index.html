@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DEMメッシュと解像度</title>
+<style>
+  :root{
+    --bg:#f6f5f1; --panel:#ffffff; --ink:#222; --sub:#666;
+    --line:#d9d6cd; --accent:#2f5d8a; --mark:#b8432f;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font-family:"Hiragino Sans","Noto Sans JP","Yu Gothic",system-ui,sans-serif}
+  .app{display:grid;grid-template-columns:1fr 300px;height:100vh;height:100dvh}
+  #view{position:relative;min-height:0;min-width:0}
+  #view canvas{display:block;width:100%;height:100%}
+  .panel{background:var(--panel);border-left:1px solid var(--line);padding:16px 18px;overflow:auto}
+  h1{font-size:16px;margin:0 0 6px;font-weight:600}
+  .note{font-size:12px;color:var(--sub);line-height:1.7;margin:0}
+  .row{margin:16px 0}
+  label{display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px}
+  .val{font-variant-numeric:tabular-nums;font-weight:600}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  select{width:100%;padding:7px;font:inherit;font-size:13px;border:1px solid var(--line);border-radius:4px;background:#fff}
+  .seg{display:flex;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+  .seg button{flex:1;border:0;border-right:1px solid var(--line);background:#fff;padding:8px 4px;
+    font:inherit;font-size:13px;cursor:pointer;color:var(--ink)}
+  .seg button:last-child{border-right:0}
+  .seg button.on{background:var(--accent);color:#fff}
+  .overlay{position:absolute;left:12px;top:12px;max-width:calc(100% - 24px);
+    background:rgba(255,255,255,.92);border:1px solid var(--line);padding:8px 12px;
+    font-size:13px;line-height:1.7;font-variant-numeric:tabular-nums}
+  .overlay b{color:var(--mark);font-weight:600}
+  .credit{position:absolute;right:8px;bottom:6px;font-size:11px;color:var(--sub)}
+  .credit a{color:var(--sub)}
+  @media (max-width:760px){
+    .app{grid-template-columns:1fr;grid-template-rows:auto auto;height:auto}
+    #view{height:62vh;height:62dvh}
+    .panel{border-left:0;border-top:1px solid var(--line)}
+    .overlay{font-size:12px;padding:6px 10px}
+  }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div class="app">
+  <div id="view">
+    <div class="overlay" id="info">読み込み中…</div>
+    <div class="credit">標高：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル（標高タイル）</a></div>
+  </div>
+  <div class="panel">
+    <h1>DEMは「高さの格子」</h1>
+    <p class="note">同じ範囲を何マスに区切るかで、地形の見え方が変わります。各マスの高さは、マス内の元データの平均値です。赤いマスは、その解像度での最高点です。</p>
+
+    <div class="row">
+      <label for="place">場所</label>
+      <select id="place"></select>
+    </div>
+
+    <div class="row">
+      <label for="res"><span>格子数</span><span class="val" id="resVal"></span></label>
+      <input type="range" id="res" min="0" max="5" step="1" value="2">
+    </div>
+
+    <div class="row">
+      <label for="exag"><span>高さの強調</span><span class="val" id="exagVal"></span></label>
+      <input type="range" id="exag" min="1" max="10" step="0.5" value="2">
+    </div>
+
+    <div class="row">
+      <label>表示</label>
+      <div class="seg" id="mode">
+        <button data-m="bar" class="on">バー</button>
+        <button data-m="surface">面</button>
+        <button data-m="both">重ねる</button>
+      </div>
+    </div>
+
+    <p class="note">ドラッグで回転、ホイール／ピンチで拡大縮小。</p>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const PRESETS = [
+  { id:'fuji',  name:'富士山',                       lat:35.3606, lng:138.7274, z:12 },
+  { id:'aso',   name:'阿蘇カルデラ',                 lat:32.8840, lng:131.1040, z:10 },
+  { id:'sagami',name:'相模原キャンパス周辺（台地）', lat:35.5670, lng:139.4030, z:13 },
+];
+const RES = [4, 8, 16, 32, 64, 128];
+const WORLD = 100;          // シーン上のタイル一辺
+const TILE_PX = 256;
+
+/* ---------- 標高タイルの取得と復号 ---------- */
+function tileOf(lat, lng, z){
+  const n = 2 ** z;
+  const x = Math.floor((lng + 180) / 360 * n);
+  const r = lat * Math.PI / 180;
+  const y = Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n);
+  return { x, y };
+}
+function tileMeters(lat, z){
+  return 40075016.686 * Math.cos(lat * Math.PI / 180) / 2 ** z;
+}
+// 地理院 標高タイル(PNG): x = R*2^16 + G*2^8 + B, u = 0.01m, x = 2^23 は無効値
+function decodeGSI(r, g, b){
+  const v = r * 65536 + g * 256 + b;
+  if (v === 8388608) return NaN;
+  return (v < 8388608 ? v : v - 16777216) * 0.01;
+}
+async function loadTile(p){
+  const { x, y } = tileOf(p.lat, p.lng, p.z);
+  const url = `https://cyberjapandata.gsi.go.jp/xyz/dem_png/${p.z}/${x}/${y}.png`;
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.src = url;
+  await img.decode();
+  const c = document.createElement('canvas');
+  c.width = c.height = TILE_PX;
+  const ctx = c.getContext('2d', { willReadFrequently:true });
+  ctx.drawImage(img, 0, 0);
+  const d = ctx.getImageData(0, 0, TILE_PX, TILE_PX).data;
+  const h = new Float32Array(TILE_PX * TILE_PX);
+  for (let i = 0; i < h.length; i++){
+    const v = decodeGSI(d[i*4], d[i*4+1], d[i*4+2]);
+    h[i] = Number.isNaN(v) ? 0 : v;   // 海域などの無効値は0mとして扱う
+  }
+  return h;
+}
+function synthetic(){
+  const h = new Float32Array(TILE_PX * TILE_PX);
+  for (let j = 0; j < TILE_PX; j++) for (let i = 0; i < TILE_PX; i++){
+    const dx = (i - 120) / 50, dy = (j - 130) / 50;
+    const ex = (i - 200) / 30, ey = (j - 60) / 30;
+    h[j*TILE_PX+i] = 2500 * Math.exp(-(dx*dx+dy*dy)) + 900 * Math.exp(-(ex*ex+ey*ey))
+                   + 60 * Math.sin(i / 9) * Math.cos(j / 11);
+  }
+  return h;
+}
+
+/* ---------- ダウンサンプリング（ブロック平均） ---------- */
+function resample(src, n){
+  const s = TILE_PX / n, out = new Float32Array(n * n);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++){
+    let sum = 0;
+    for (let y = 0; y < s; y++) for (let x = 0; x < s; x++)
+      sum += src[(j*s + y) * TILE_PX + (i*s + x)];
+    out[j*n+i] = sum / (s*s);
+  }
+  return out;
+}
+
+/* ---------- 配色（低→高） ---------- */
+const STOPS = [
+  [0.00, new THREE.Color('#5d8a63')],
+  [0.30, new THREE.Color('#a9b97c')],
+  [0.60, new THREE.Color('#cfae74')],
+  [0.85, new THREE.Color('#9c7f68')],
+  [1.00, new THREE.Color('#f3f2ee')],
+];
+function ramp(t, out){
+  t = Math.min(1, Math.max(0, t));
+  for (let k = 1; k < STOPS.length; k++){
+    if (t <= STOPS[k][0]){
+      const [t0, c0] = STOPS[k-1], [t1, c1] = STOPS[k];
+      return out.copy(c0).lerp(c1, (t - t0) / (t1 - t0));
+    }
+  }
+  return out.copy(STOPS[STOPS.length-1][1]);
+}
+const MARK = new THREE.Color('#b8432f');
+
+/* ---------- Three.js ---------- */
+const view = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setClearColor('#f6f5f1');
+view.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, -1000, 1000);
+cam.position.set(100, 85, 100);
+cam.zoom = 1;
+const controls = new OrbitControls(cam, renderer.domElement);
+controls.enableDamping = true;
+controls.target.set(0, 8, 0);
+
+scene.add(new THREE.HemisphereLight('#ffffff', '#b9b4a8', 1.6));
+const sun = new THREE.DirectionalLight('#ffffff', 1.6);
+sun.position.set(-60, 100, 40);
+scene.add(sun);
+
+const base = new THREE.Mesh(
+  new THREE.BoxGeometry(WORLD, 1, WORLD),
+  new THREE.MeshLambertMaterial({ color:'#d4d0c6' })
+);
+base.position.y = -0.5;
+scene.add(base);
+
+function resize(){
+  const w = view.clientWidth, h = view.clientHeight, a = w / h, half = 75;
+  cam.left = -half * a; cam.right = half * a; cam.top = half; cam.bottom = -half;
+  cam.updateProjectionMatrix();
+  renderer.setSize(w, h, false);
+}
+new ResizeObserver(resize).observe(view);
+
+/* ---------- 状態と描画 ---------- */
+const state = { preset:PRESETS[0], src:null, meters:0, fallback:false, n:16, exag:2, mode:'bar' };
+let group = null;
+
+function build(){
+  if (!state.src) return;
+  if (group){
+    group.traverse(o => { o.geometry?.dispose(); o.material?.dispose(); });
+    scene.remove(group);
+  }
+  group = new THREE.Group();
+  const n = state.n, cell = WORLD / n;
+  const grid = resample(state.src, n);
+  const mPerUnit = state.meters / WORLD;
+  let min = Infinity, max = -Infinity, maxIdx = 0, srcMax = -Infinity;
+  for (let i = 0; i < grid.length; i++){
+    if (grid[i] < min) min = grid[i];
+    if (grid[i] > max){ max = grid[i]; maxIdx = i; }
+  }
+  for (const v of state.src) if (v > srcMax) srcMax = v;
+  const hu = v => Math.max(0.05, (v - Math.min(0, min)) / mPerUnit * state.exag);
+  const col = new THREE.Color();
+  const tOf = v => (v - min) / Math.max(1, max - min);
+
+  if (state.mode !== 'surface'){
+    const geo = new THREE.BoxGeometry(1, 1, 1); geo.translate(0, 0.5, 0);
+    const mat = new THREE.MeshLambertMaterial({ transparent: state.mode === 'both', opacity: state.mode === 'both' ? 0.55 : 1 });
+    const mesh = new THREE.InstancedMesh(geo, mat, n * n);
+    const m = new THREE.Matrix4(), gap = n <= 32 ? 0.92 : 1;
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++){
+      const k = j * n + i;
+      m.makeScale(cell * gap, hu(grid[k]), cell * gap);
+      m.setPosition(-WORLD/2 + cell*(i+0.5), 0, -WORLD/2 + cell*(j+0.5));
+      mesh.setMatrixAt(k, m);
+      mesh.setColorAt(k, k === maxIdx ? MARK : ramp(tOf(grid[k]), col));
+    }
+    group.add(mesh);
+  }
+  if (state.mode !== 'bar'){
+    const span = WORLD - cell;
+    const geo = new THREE.PlaneGeometry(span, span, n - 1, n - 1);
+    geo.rotateX(-Math.PI / 2);
+    const pos = geo.attributes.position, colors = new Float32Array(pos.count * 3);
+    for (let k = 0; k < pos.count; k++){
+      pos.setY(k, hu(grid[k]));
+      ramp(tOf(grid[k]), col).toArray(colors, k * 3);
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.computeVertexNormals();
+    group.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors:true, side:THREE.DoubleSide })));
+  }
+  scene.add(group);
+
+  document.getElementById('info').innerHTML =
+    `${state.preset.name}${state.fallback ? '（取得失敗のためサンプル地形）' : ''}<br>` +
+    `格子 ${n}×${n}　1マス 約 ${Math.round(state.meters / n).toLocaleString()} m<br>` +
+    `この解像度の最高点 <b>${Math.round(max).toLocaleString()} m</b>　元データの最高点 ${Math.round(srcMax).toLocaleString()} m`;
+}
+
+async function loadPreset(p){
+  state.preset = p;
+  document.getElementById('info').textContent = '読み込み中…';
+  try { state.src = await loadTile(p); state.fallback = false; }
+  catch { state.src = synthetic(); state.fallback = true; }
+  state.meters = tileMeters(p.lat, p.z);
+  build();
+}
+
+/* ---------- UI ---------- */
+const sel = document.getElementById('place');
+PRESETS.forEach(p => sel.add(new Option(p.name, p.id)));
+sel.onchange = () => loadPreset(PRESETS.find(p => p.id === sel.value));
+
+const res = document.getElementById('res'), resVal = document.getElementById('resVal');
+const exag = document.getElementById('exag'), exagVal = document.getElementById('exagVal');
+const syncLabels = () => { resVal.textContent = `${state.n}×${state.n}`; exagVal.textContent = `×${state.exag}`; };
+res.oninput = () => { state.n = RES[+res.value]; syncLabels(); build(); };
+exag.oninput = () => { state.exag = +exag.value; syncLabels(); build(); };
+document.querySelectorAll('#mode button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#mode button').forEach(x => x.classList.toggle('on', x === b));
+  state.mode = b.dataset.m; build();
+});
+syncLabels();
+
+resize();
+loadPreset(PRESETS[0]);
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, cam); });
+</script>
+</body>
+</html>
