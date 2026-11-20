@@ -13,14 +13,23 @@
 
 Scaniverseを用いてご自身のスマートフォンで作成した推し地物をspzにして保存しましょう！
 
+[Phase1の攻略法](./support1/)
+
+[Scaniverse (Google Play)](https://play.google.com/store/apps/details?id=com.nianticlabs.scaniverse&hl=en-US) | [Scaniverse (App Store)](https://apps.apple.com/jp/app/scaniverse-3d-scanner/id1541433223)
+
+
 **Phase2 (Challenge)**
 
 spzファイルを地図上に読み込んで、適切な位置に移動させてスクショにしましょう！
 
+[Phase2の攻略法](./support2/)
+
+SplatのPageは[ここ(./chapter4/05-splat/)](./chapter4/05-splat/) 
+
 上記二点を講義後の課題として課しましたが、サポートが不十分だったと思います。
 アプリの使い方とファイルの保存方法、ブラウザへのアップロードなどのサポートページを作成しておきますのでご確認ください。
 
-[サポートページのリンク](./support/)
+
 
 
 
